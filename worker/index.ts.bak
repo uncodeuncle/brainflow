@@ -7,10 +7,6 @@ import OSS from 'ali-oss';
 import dotenv from 'dotenv';
 import { fetchBilibiliSubtitle, fetchBilibiliMedia } from './fetchBilibiliSubtitle';
 import OpenAI from 'openai';
-import { Semaphore } from './Semaphore';
-
-// 全局媒体信号量：所有用户任务共享，控制带宽密集型操作（视频/音频下载、OSS上传）的并发数
-const mediaSemaphore = new Semaphore(3);
 
 // Force dotenv to override existing process.env variables cached by the long-running powershell terminal
 dotenv.config({ override: true });
@@ -131,12 +127,12 @@ const worker = new Worker('bili-extract', async (job: Job) => {
     const cleanKeySecret = (process.env.ALIYUN_ACCESS_KEY_SECRET as string)?.replace(/['"]/g, '').trim() || '';
     const cleanAppKey = process.env.TINGWU_APP_KEY?.replace(/['"]/g, '').trim() || '';
 
-    const concurrencyLimit = 5; // 主流水线并发：文字 API 很轻量，放开跑
-    const textSemaphore = new Semaphore(concurrencyLimit); // 滑动窗口：一个P完成立刻补下一个
+    const concurrencyLimit = 3;
     const videoDownloadPromises: Promise<void>[] = []; // Collect all video downloads for final await
-    await Promise.all(items.map(async (item: any, i: number) => {
-        await textSemaphore.acquire();
-        try {
+    for (let j = 0; j < items.length; j += concurrencyLimit) {
+        const chunk = items.slice(j, j + concurrencyLimit);
+        await Promise.all(chunk.map(async (item: any, chunkIdx: number) => {
+            const i = j + chunkIdx;
             const baseProgress = 5 + (i * itemProgressWeight);
             const stepProgress = itemProgressWeight / 4;
 
@@ -161,7 +157,7 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                 if (!fs.existsSync(hiddenDir)) fs.mkdirSync(hiddenDir, { recursive: true });
 
                 // 【核心修复】：将用户的 SESSDATA 写成 Netscape Cookie 文件，传给 yt-dlp
-                // 这样服务器上的 yt-dlp 也能像本地浏览器一样通过源平台身份验证，绕过 412
+                // 这样服务器上的 yt-dlp 也能像本地浏览器一样通过 B站身份验证，绕过 412
                 const rawSessdataForCookie = job.data.sessdata || process.env.BILIBILI_SESSION_TOKEN?.replace(/['"]/g, '').trim();
                 let cookieArg = '';
                 if (rawSessdataForCookie) {
@@ -176,9 +172,7 @@ const worker = new Worker('bili-extract', async (job: Job) => {
 
                 const rawUrl = job.data.url.replace(/^(?!https?:\/\/)/i, 'https://');
                 const parsedUrl = new URL(rawUrl);
-                // Keep query params for non-bilibili sites (like Xiaohongshu) as they contain required security tokens (xsec_token)
-                const isBilibili = parsedUrl.hostname.includes('bilibili.com') || parsedUrl.hostname.includes('b23.tv');
-                const cleanUrl = isBilibili ? `${parsedUrl.origin}${parsedUrl.pathname}` : rawUrl;
+                const cleanUrl = `${parsedUrl.origin}${parsedUrl.pathname}`;
 
                 // Only add local bin to PATH on Windows
                 const env = { ...process.env };
@@ -186,7 +180,7 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                     const ffmpegPath = path.join(process.cwd(), 'bin');
                     env.PATH = `${ffmpegPath};${process.env.PATH}`;
                 }
-                const expectedBaseName = `J${job.id}_${safeTitle}_P${item.index}`;
+                const expectedBaseName = `${safeTitle}_P${item.index}`;
                 const isVideoIncluded = job.data.formats?.downloadVideo;
 
                 const resultObj: any = {
@@ -234,17 +228,17 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                 console.log(`[DEBUG-YTDLP] 最终决定 yt-dlp 目标 URL: ${ytdlpTargetUrl}`);
                 console.log(`[DEBUG-YTDLP] 最终决定 yt-dlp 列表参数: ${ytdlpTargetOptions}`);
 
-                // --------------- 优先级一：源平台 API 字幕直取 (0成本, 秒级) ---------------
-                console.log(`[P${item.index}] 🚀 尝试源平台 API 字幕直取...`);
+                // --------------- 优先级一：B站 API 字幕直取 (0成本, 秒级) ---------------
+                console.log(`[P${item.index}] 🚀 尝试 B站 API 字幕直取...`);
                 await safeUpdateProgress({ step: 'transcribe', p: item.index, message: '正在提取核心信息...', percent: Math.round(baseProgress + stepProgress * 1), partialResults: results });
 
                 // SESSDATA: 1) 用户扫码存 localStorage → 前端传入 2) .env 环境变量
                 const rawSessdata = job.data.sessdata || process.env.BILIBILI_SESSION_TOKEN?.replace(/['"]/g, '').trim();
-                // 必须进行 URI 编码，防止用户传入的 SESSDATA 带有分号、逗号、星号等导致解析 Cookie 失败并返回 -412
+                // 必须进行 URI 编码，防止用户传入的 SESSDATA 带有分号、逗号、星号等导致 B站解析 Cookie 失败并返回 -412
                 const sessdata = rawSessdata ? encodeURIComponent(decodeURIComponent(rawSessdata)) : undefined;
 
                 if (!sessdata) {
-                    console.log(`[P${item.index}] ⚠️ 未提供 SESSDATA，API 可能无法返回完整字幕数据`);
+                    console.log(`[P${item.index}] ⚠️ 未提供 SESSDATA，B站 API 可能无法返回字幕数据`);
                 } else {
                     console.log(`[P${item.index}] 🔑 SESSDATA 已就绪 (编码后长: ${sessdata.length})`);
                 }
@@ -297,56 +291,37 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                     console.log(`[P${item.index}] ⚠️ 字幕均不可用，降级到阿里云 NLS 语音转文字 (会消耗配额)...`);
                     await safeUpdateProgress({ step: 'download', p: item.index, message: '启动语义识别...', percent: Math.round(baseProgress + stepProgress * 2), partialResults: results });
 
-                    // Audio extraction via 原生 API (bypasses yt-dlp 412)
-                    // 带宽密集段：下载 + FFmpeg + OSS 上传 → 完成后释放 media slot
-                    let audioResolvedFileName = `${expectedBaseName}_16k.mp3`;
-                    let audioActualFilePath = path.join(hiddenDir, audioResolvedFileName);
-                    let rawAudioFilePath = '';
+                    // Audio extraction via B站 API (bypasses yt-dlp 412)
+                    console.log(`[P${item.index}] 🔊 通过 B站 API 下载音频用于语音转文字...`);
+                    const audioMediaResult = await fetchBilibiliMedia(
+                        cleanUrl, pageForSubtitle, sessdata ? decodeURIComponent(sessdata) : undefined,
+                        hiddenDir, expectedBaseName,
+                        { audio: true, video: false }
+                    );
 
-                    await mediaSemaphore.acquire(); // 获取媒体 slot
-                    try {
-                        if (realBvid) {
-                            console.log(`[P${item.index}] 🔊 通过原生 API 下载音频用于语音转文字 (B站高速通道)...`);
-                            const audioTargetUrl = `https://www.bilibili.com/video/${realBvid}/`;
-                            const audioMediaResult = await fetchBilibiliMedia(
-                                audioTargetUrl, realPage, sessdata ? decodeURIComponent(sessdata) : undefined,
-                                hiddenDir, expectedBaseName,
-                                { audio: true, video: false }
-                            );
-
-                            if (!audioMediaResult.success || !audioMediaResult.audioPath) {
-                                throw new Error(`原生 API 音频下载失败: ${audioMediaResult.error || '未知错误'}`);
-                            }
-                            rawAudioFilePath = audioMediaResult.audioPath;
-                        } else {
-                            console.log(`[P${item.index}] 🔊 检测到非标准B站链接(如小红书/油管)，使用通用流媒体引擎 (yt-dlp) 提取音频...`);
-                            rawAudioFilePath = path.join(hiddenDir, `${expectedBaseName}_ytdl.m4a`);
-                            // We use a robust User-Agent and let yt-dlp auto-select the best format to avoid 'No video formats found' on strict platforms like Xiaohongshu
-                            const genericUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36';
-                            const ytdlpAudioCmd = `"${ytdlpPath}" --extract-audio --audio-format m4a --output "${rawAudioFilePath}" --no-check-certificates --user-agent "${genericUA}" "${cleanUrl}"`;
-                            await execAsync(ytdlpAudioCmd, { env });
-                        }
-
-                        console.log(`执行 FFmpeg 音频降频 (强制 16000Hz 单声道 MP3)...`);
-                        const ffmpegCommand = `ffmpeg -y -i "${rawAudioFilePath}" -ar 16000 -ac 1 -ab 64k "${audioActualFilePath}"`;
-                        await execAsync(ffmpegCommand, { env });
-
-                        // OSS Upload
-                        console.log('将音频上传至阿里云 OSS ...');
-                        await safeUpdateProgress({ step: 'upload', p: item.index, message: '上传中...', percent: Math.round(baseProgress + stepProgress * 2.5), partialResults: results });
-
-                        const cleanRegion = (process.env.ALIYUN_OSS_REGION || '').replace(/['"]/g, '').replace('.aliyuncs.com', '').trim();
-                        const cleanBucket = (process.env.ALIYUN_OSS_BUCKET || '').replace(/['"]/g, '').trim().replace(/[^a-z0-9-]/g, '');
-                        const client = new OSS({ region: cleanRegion, accessKeyId: cleanKeyId, accessKeySecret: cleanKeySecret, bucket: cleanBucket });
-                        const ossObjectName = `bilibrain-audio/${Date.now()}_${audioResolvedFileName}`;
-                        await client.put(ossObjectName, audioActualFilePath);
-                        const signedUrl = client.signatureUrl(ossObjectName, { expires: 14400 });
-                        resultObj.ossAudioUrl = signedUrl;
-                    } finally {
-                        mediaSemaphore.release(); // ⚠️ 上传完就释放 slot，NLS 轮询不占带宽
+                    if (!audioMediaResult.success || !audioMediaResult.audioPath) {
+                        throw new Error(`B站 API 音频下载失败: ${audioMediaResult.error || '未知错误'}`);
                     }
 
-                    // 以下是纯 API 轮询，不占 media slot
+                    const rawAudioFilePath = audioMediaResult.audioPath;
+
+                    console.log(`执行 FFmpeg 音频降频 (强制 16000Hz 单声道 MP3)...`);
+                    let audioResolvedFileName = `${expectedBaseName}_16k.mp3`;
+                    let audioActualFilePath = path.join(hiddenDir, audioResolvedFileName);
+                    const ffmpegCommand = `ffmpeg -y -i "${rawAudioFilePath}" -ar 16000 -ac 1 -ab 64k "${audioActualFilePath}"`;
+                    await execAsync(ffmpegCommand, { env });
+
+                    // OSS Upload
+                    console.log('将音频上传至阿里云 OSS ...');
+                    await safeUpdateProgress({ step: 'upload', p: item.index, message: '上传中...', percent: Math.round(baseProgress + stepProgress * 2.5), partialResults: results });
+
+                    const cleanRegion = (process.env.ALIYUN_OSS_REGION || '').replace(/['"]/g, '').replace('.aliyuncs.com', '').trim();
+                    const cleanBucket = (process.env.ALIYUN_OSS_BUCKET || '').replace(/['"]/g, '').trim().replace(/[^a-z0-9-]/g, '');
+                    const client = new OSS({ region: cleanRegion, accessKeyId: cleanKeyId, accessKeySecret: cleanKeySecret, bucket: cleanBucket });
+                    const ossObjectName = `bilibrain-audio/${Date.now()}_${audioResolvedFileName}`;
+                    await client.put(ossObjectName, audioActualFilePath);
+                    const signedUrl = client.signatureUrl(ossObjectName, { expires: 14400 });
+                    resultObj.ossAudioUrl = signedUrl;
 
                     // NLS Transcription
                     console.log('正在提交阿里云 NLS 录音文件识别任务...');
@@ -376,20 +351,12 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                             pollCount++;
                             const taskInfo: any = await nlsClient.request('GetTaskResult', { TaskId: taskId }, { method: 'GET' });
                             if (taskInfo.StatusText === 'SUCCESS') { transcriptionResult = taskInfo.Result; break; }
-                            else if (taskInfo.StatusText === 'SUCCESS_WITH_NO_VALID_FRAGMENT') {
-                                console.warn(`[P${item.index}] ⚠️ NLS 返回 SUCCESS_WITH_NO_VALID_FRAGMENT（音频无有效语音，可能是纯音乐/BGM）`);
-                                fullText = `[此视频无有效语音] 音频中未检测到可识别的语音片段（可能是纯音乐/BGM），无法生成文字转录。`;
-                                transcriptionMethod = 'nls_no_speech';
-                                break;
-                            }
                             else if (taskInfo.StatusText === 'FAILED') throw new Error(`NLS 转录失败: ${JSON.stringify(taskInfo)}`);
                             await safeUpdateProgress({ step: 'transcribe', p: item.index, message: `转录中: ${taskInfo.StatusText}...`, percent: Math.round(baseProgress + stepProgress * 3), partialResults: results });
                         }
-                        if (!transcriptionResult && transcriptionMethod !== 'nls_no_speech') throw new Error("NLS 转录超时");
-                        if (transcriptionResult) {
-                            fullText = transcriptionResult.Sentences?.map((s: any) => s.Text).join(' ') || "转录结果为空";
-                            transcriptionMethod = 'aliyun_nls';
-                        }
+                        if (!transcriptionResult) throw new Error("NLS 转录超时");
+                        fullText = transcriptionResult.Sentences?.map((s: any) => s.Text).join(' ') || "转录结果为空";
+                        transcriptionMethod = 'aliyun_nls';
                     }
                 }
 
@@ -401,42 +368,30 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                 if (isVideoIncluded) {
                     resultObj.isVideoDownloading = true; // Let the frontend know a video is coming
                     const vp = (async () => {
-                        await mediaSemaphore.acquire(); // 获取媒体下载 slot
                         try {
-                            if (realBvid) {
-                                console.log(`[P${item.index}] 🎬 通过原生 API 下载视频 (B站高速通道)...`);
-                                const videoTargetUrl = `https://www.bilibili.com/video/${realBvid}/`;
-                                const mediaResult = await fetchBilibiliMedia(
-                                    videoTargetUrl, realPage, sessdata ? decodeURIComponent(sessdata) : undefined,
-                                    hiddenDir, expectedBaseName,
-                                    { audio: true, video: true }
-                                );
-                                if (mediaResult.success && mediaResult.videoPath && mediaResult.audioPath) {
-                                    const mergedPath = path.join(publicDir, `${expectedBaseName}.mp4`);
-                                    const mergeCmd = `ffmpeg -y -i "${mediaResult.videoPath}" -i "${mediaResult.audioPath}" -c:v copy -c:a aac -strict experimental "${mergedPath}"`;
-                                    console.log(`[P${item.index}] 🔀 FFmpeg 合并音视频...`);
-                                    await execAsync(mergeCmd, { env });
-                                    resultObj.videoUrl = `/tools/brainflow/downloads/${expectedBaseName}.mp4`;
-                                    resultObj.localPath = mergedPath;
-                                    console.log(`[P${item.index}] ✅ 视频下载+合并完成！`);
-                                } else if (mediaResult.error) {
-                                    console.warn(`[P${item.index}] ⚠️ 原生 API 视频下载失败: ${mediaResult.error}`);
-                                }
-                            } else {
-                                console.log(`[P${item.index}] 🎬 检测到非标准B站链接，使用通用流媒体引擎 (yt-dlp) 提取视频...`);
+                            console.log(`[P${item.index}] 🎬 通过 B站 API 下载视频 (与 AI 分析并行)...`);
+                            // 使用与字幕获取一致的 realBvid/realPage，确保合集中每集下载正确的视频
+                            const videoTargetUrl = realBvid ? `https://www.bilibili.com/video/${realBvid}/` : cleanUrl;
+                            const videoTargetPage = realBvid ? realPage : pageForSubtitle;
+                            const mediaResult = await fetchBilibiliMedia(
+                                videoTargetUrl, videoTargetPage, sessdata ? decodeURIComponent(sessdata) : undefined,
+                                hiddenDir, expectedBaseName,
+                                { audio: true, video: true }
+                            );
+                            if (mediaResult.success && mediaResult.videoPath && mediaResult.audioPath) {
                                 const mergedPath = path.join(publicDir, `${expectedBaseName}.mp4`);
-                                const genericUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36';
-                                // yt-dlp will automatically download best video+audio and merge them if ffmpeg is available
-                                const ytdlpVideoCmd = `"${ytdlpPath}" -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --merge-output-format mp4 --output "${mergedPath}" --no-check-certificates --user-agent "${genericUA}" "${cleanUrl}"`;
-                                await execAsync(ytdlpVideoCmd, { env });
+                                const mergeCmd = `ffmpeg -y -i "${mediaResult.videoPath}" -i "${mediaResult.audioPath}" -c:v copy -c:a aac -strict experimental "${mergedPath}"`;
+                                console.log(`[P${item.index}] 🔀 FFmpeg 合并音视频...`);
+                                await execAsync(mergeCmd, { env });
                                 resultObj.videoUrl = `/tools/brainflow/downloads/${expectedBaseName}.mp4`;
                                 resultObj.localPath = mergedPath;
-                                console.log(`[P${item.index}] ✅ 通用视频下载+合并完成！`);
+                                console.log(`[P${item.index}] ✅ 视频下载+合并完成！`);
+                            } else if (mediaResult.error) {
+                                console.warn(`[P${item.index}] ⚠️ B站 API 视频下载失败: ${mediaResult.error}`);
                             }
                         } catch (e: any) {
                             console.warn(`[P${item.index}] ❌ 视频下载异常: ${e.message?.slice(0, 100)}`);
                         } finally {
-                            mediaSemaphore.release(); // ⚠️ 必须释放 slot，无论成功失败
                             // Turn off loading flag and optionally tell frontend to render the download button
                             resultObj.isVideoDownloading = false;
                             await safeUpdateProgress({
@@ -451,45 +406,25 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                 }
 
                 // Phase 6: DeepSeek API Integration
-                // 字幕极短时跳过 AI 分析，避免 DeepSeek 返回空 chapters
-                if (fullText.length < 100 || fullText.startsWith('[此视频无')) {
-                    console.warn(`[P${item.index}] 字幕过短或无效 (${fullText.length}字), 跳过 AI 分析`);
-                    resultObj.chapters = [{
-                        id: 'chapter_short',
-                        title: item.title,
-                        nodes: [{
-                            id: 'card_short_01',
-                            title: '内容摘要',
-                            type: 'concept',
-                            content: fullText,
-                            detailedPoints: [],
-                            relations: []
-                        }]
-                    }];
-                    resultObj.terms = [];
-                    resultObj.summary = JSON.stringify({ chapters: resultObj.chapters, terms: [] });
-                    resultObj.transcriptionMethod = resultObj.transcriptionMethod || transcriptionMethod;
-                    console.log(`[P${item.index}] ✅ 短内容已生成占位卡片`);
-                } else {
-                    console.log('调用 DeepSeek 提取高颗粒度知识模块...');
-                    await safeUpdateProgress({ step: 'ai_brain', p: item.index, message: '正在进行深度知识萃取...', percent: Math.round(baseProgress + stepProgress * 4), partialResults: results });
+                console.log('调用 DeepSeek 提取高颗粒度知识模块...');
+                await safeUpdateProgress({ step: 'ai_brain', p: item.index, message: '正在进行深度知识萃取...', percent: Math.round(baseProgress + stepProgress * 4), partialResults: results });
 
-                    // Pass full text to DeepSeek (no truncation)
-                    const safeFullText = fullText;
+                // Pass full text to DeepSeek (no truncation)
+                const safeFullText = fullText;
 
-                    try {
-                        const deepseekKey = (process.env.DEEPSEEK_API_KEY as string)?.replace(/['"]/g, '').trim();
+                try {
+                    const deepseekKey = (process.env.DEEPSEEK_API_KEY as string)?.replace(/['"]/g, '').trim();
 
-                        if (!deepseekKey) {
-                            throw new Error("Missing DEEPSEEK_API_KEY in environment variables. 请在 .env 文件中添加 DEEPSEEK_API_KEY");
-                        }
+                    if (!deepseekKey) {
+                        throw new Error("Missing DEEPSEEK_API_KEY in environment variables. 请在 .env 文件中添加 DEEPSEEK_API_KEY");
+                    }
 
-                        const openai = new OpenAI({
-                            baseURL: 'https://api.deepseek.com',
-                            apiKey: deepseekKey
-                        });
+                    const openai = new OpenAI({
+                        baseURL: 'https://api.deepseek.com',
+                        apiKey: deepseekKey
+                    });
 
-                        const systemPrompt = `你是一名极度理性的专属知识库架构师。
+                    const systemPrompt = `你是一名极度理性的专属知识库架构师。
 核心任务是将视频文稿萃取为原子化、**树状层级**的知识卡片流 (Card Flow)。
 
 【格式要求】
@@ -544,30 +479,29 @@ const worker = new Worker('bili-extract', async (job: Job) => {
 【错误示例 - 绝对禁止】
 chapters: [{ nodes: [{ title: "打开设置" }, { title: "选择16:9" }, { title: "点击确认" }] }]`;
 
-                        const completion = await openai.chat.completions.create({
-                            messages: [
-                                { role: "system", content: systemPrompt },
-                                { role: "user", content: `【视频标题上下文】：${item.title}\n\n请严格基于以下转录文稿，进行极度克制、具有归纳性的结构萃取（原封不动抄写关键参数，但摒弃无用转折口语），并只输出合法的 JSON 格式：\n\n${fullText}` }
-                            ],
-                            model: "deepseek-chat",
-                            response_format: { type: "json_object" }
-                        });
+                    const completion = await openai.chat.completions.create({
+                        messages: [
+                            { role: "system", content: systemPrompt },
+                            { role: "user", content: `【视频标题上下文】：${item.title}\n\n请严格基于以下转录文稿，进行极度克制、具有归纳性的结构萃取（原封不动抄写关键参数，但摒弃无用转折口语），并只输出合法的 JSON 格式：\n\n${fullText}` }
+                        ],
+                        model: "deepseek-chat",
+                        response_format: { type: "json_object" }
+                    });
 
-                        const rawContent = completion.choices[0].message.content || '{}';
-                        resultObj.summary = rawContent;
-                        try {
-                            const parsed = JSON.parse(rawContent);
-                            resultObj.chapters = parsed.chapters || [];
-                            resultObj.terms = parsed.terms || [];
-                        } catch (e) {
-                            console.warn(`P${item.index} JSON 解析失败，保留 raw summary作为 fallback`);
-                        }
-                        console.log(`P${item.index} DeepSeek 回包解析成功！`);
-                    } catch (aiError: any) {
-                        console.error('DeepSeek AI 提取失败:', aiError);
-                        resultObj.summary = `AI 分析失败，但已获取到转录文本。\n错误: ${aiError.message}`;
+                    const rawContent = completion.choices[0].message.content || '{}';
+                    resultObj.summary = rawContent;
+                    try {
+                        const parsed = JSON.parse(rawContent);
+                        resultObj.chapters = parsed.chapters || [];
+                        resultObj.terms = parsed.terms || [];
+                    } catch (e) {
+                        console.warn(`P${item.index} JSON 解析失败，保留 raw summary作为 fallback`);
                     }
-                } // ← 关闭 short-text else 分支
+                    console.log(`P${item.index} DeepSeek 回包解析成功！`);
+                } catch (aiError: any) {
+                    console.error('DeepSeek AI 提取失败:', aiError);
+                    resultObj.summary = `AI 分析失败，但已获取到转录文本。\n错误: ${aiError.message}`;
+                }
 
 
                 results.push(resultObj);
@@ -584,33 +518,15 @@ chapters: [{ nodes: [{ title: "打开设置" }, { title: "选择16:9" }, { title
 
             } catch (err: any) {
                 console.error(`P${item.index} 处理失败:`, err);
-                results.push({
-                    index: item.index,
-                    title: item.title,
-                    status: 'error',
-                    error: err.message,
-                    chapters: [],
-                    terms: [],
-                    summary: JSON.stringify({ error: err.message })
-                });
-                // ❗ 必须推送进度，否则前端永远收不到这个 P 的结果
-                await safeUpdateProgress({
-                    step: 'error', p: item.index,
-                    message: `P${item.index} 处理失败: ${err.message?.slice(0, 80)}`,
-                    partialResults: results
-                }).catch(() => { });
+                results.push({ index: item.index, status: 'error', error: err.message });
             }
-        } finally {
-            textSemaphore.release();
-        }
-    }));
+        }));
+    }
 
     results.sort((a, b) => a.index - b.index); // Final sort to guarantee correct order
 
     // 【多步 Map-Reduce 流水线】如果这是合集，分步生成全局沙盘结构
-    const successResults = results.filter(r => r.status === 'success' && r.chapters && r.chapters.length > 0);
-    console.log(`[Map-Reduce 前置检查] 共 ${results.length} 个结果, 成功 ${successResults.length} 个, 失败 ${results.length - successResults.length} 个`);
-    if (successResults.length > 1) {
+    if (results.length > 1 && results.every(r => r.status === 'success' && r.chapters)) {
         try {
             console.log('---> 开始多步 Map-Reduce 跨集融合流水线...');
             const deepseekKey = (process.env.DEEPSEEK_API_KEY as string)?.replace(/['"]/g, '').trim();
@@ -620,8 +536,8 @@ chapters: [{ nodes: [{ title: "打开设置" }, { title: "选择16:9" }, { title
             await safeUpdateProgress({ step: 'map_reduce', message: '正在生成合集概览...', percent: 88, partialResults: results });
             console.log('[Map-Reduce 1/4] 生成合集 title + overview...');
 
-            // 构建精华骨架：只取成功的分P
-            const skeletonInput = successResults.map(r => {
+            // 构建精华骨架：每集标题 + 章节标题列表 + 核心术语
+            const skeletonInput = results.map(r => {
                 const chapterTitles = (r.chapters || []).map((ch: any) => ch.title).join(' / ');
                 const termNames = (r.terms || []).map((t: any) => t.term).join('、');
                 return `[第${r.index}集 ${r.title}]\n章节：${chapterTitles || '无'}\n术语：${termNames || '无'}`;
@@ -635,7 +551,7 @@ chapters: [{ nodes: [{ title: "打开设置" }, { title: "选择16:9" }, { title
   "title": "用一句话概括这个合集的核心主题（精炼、有概括力，不超过20字）",
   "overview": "用2-3句话简要概述整个合集的核心内容和精华，让读者快速了解这个系列讲了什么、主旨是什么。控制在80字以内。"
 }` },
-                    { role: "user", content: `以下是一个包含 ${successResults.length} 集的系列视频的结构概览：\n\n${skeletonInput}` }
+                    { role: "user", content: `以下是一个包含 ${results.length} 集的系列视频的结构概览：\n\n${skeletonInput}` }
                 ],
                 model: "deepseek-chat",
                 response_format: { type: "json_object" },
@@ -658,7 +574,7 @@ chapters: [{ nodes: [{ title: "打开设置" }, { title: "选择16:9" }, { title
             await safeUpdateProgress({ step: 'map_reduce', message: '正在规划跨集知识结构...', percent: 90, partialResults: results });
             console.log('[Map-Reduce 2/4] 结构规划：识别跨集主题骨架...');
 
-            const allSummaries = successResults.map(r => `[第${r.index}集 ${r.title}]\n` + JSON.stringify(r.chapters)).join('\n\n');
+            const allSummaries = results.map(r => `[第${r.index}集 ${r.title}]\n` + JSON.stringify(r.chapters)).join('\n\n');
             const safeAllSummaries = limitTextByteLength(allSummaries, 60000);
 
             const planningCompletion = await openai.chat.completions.create({
@@ -684,7 +600,7 @@ chapters: [{ nodes: [{ title: "打开设置" }, { title: "选择16:9" }, { title
 2. 同一个 P 可以出现在多个主题中（如果它的内容横跨多个主题）。
 3. 主题划分要有逻辑层次感，不要只是把原来的集数重新编号。要真正做到"打碎重组"。
 4. 只输出规划骨架，不要输出任何详细内容。` },
-                    { role: "user", content: `以下是 ${successResults.length} 集视频的完整结构化数据，请分析并输出跨集主题规划：\n\n${safeAllSummaries}` }
+                    { role: "user", content: `以下是 ${results.length} 集视频的完整结构化数据，请分析并输出跨集主题规划：\n\n${safeAllSummaries}` }
                 ],
                 model: "deepseek-chat",
                 response_format: { type: "json_object" },
@@ -703,7 +619,7 @@ chapters: [{ nodes: [{ title: "打开设置" }, { title: "选择16:9" }, { title
             }
 
             // 兜底校验：确保每个P至少被一个主题覆盖
-            const allPIndexes = successResults.map(r => r.index);
+            const allPIndexes = results.map(r => r.index);
             const coveredIndexes = new Set(themes.flatMap((t: any) => t.sources || []));
             const uncovered = allPIndexes.filter(idx => !coveredIndexes.has(idx));
             if (uncovered.length > 0) {
@@ -724,7 +640,7 @@ chapters: [{ nodes: [{ title: "打开设置" }, { title: "选择16:9" }, { title
 
                 // 只传该主题关联的 P 的 chapters 数据
                 const sourceIndexes: number[] = theme.sources || [];
-                const relevantData = successResults
+                const relevantData = results
                     .filter(r => sourceIndexes.includes(r.index))
                     .map(r => `[第${r.index}集 ${r.title}]\n${JSON.stringify(r.chapters)}`)
                     .join('\n\n');
@@ -811,7 +727,7 @@ chapters: [{ nodes: [{ title: "打开设置" }, { title: "选择16:9" }, { title
             await safeUpdateProgress({ step: 'map_reduce', message: '正在整合全局术语词典...', percent: 96, partialResults: results });
             console.log('[Map-Reduce 4/4] 术语合并去重...');
 
-            const allTerms = successResults.flatMap(r => (r.terms || []).map((t: any) => `${t.term}：${t.brief || t.definition || ''}`));
+            const allTerms = results.flatMap(r => (r.terms || []).map((t: any) => `${t.term}：${t.brief || t.definition || ''}`));
             const uniqueTermsInput = [...new Set(allTerms)].join('\n');
 
             let globalTerms: any[] = [];
@@ -936,7 +852,7 @@ chapters: [{ nodes: [{ title: "打开设置" }, { title: "选择16:9" }, { title
         formats: job.data.formats,
         playlistZipUrl: playlistZipUrl
     };
-}, { connection, concurrency: 2 }); // 同时处理 2 个用户任务
+}, { connection });
 
 worker.on('failed', (job, err) => {
     console.error(`[重大错误] Job ${job?.id} 彻底执行失败:`, err);

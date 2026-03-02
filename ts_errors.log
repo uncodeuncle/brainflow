@@ -1,0 +1,157 @@
+tmp_bibigpt/components/ActionsAfterResult.tsx(3,32): error TS2307: Cannot find module '~/components/SaveNoteButton' or its corresponding type declarations.
+tmp_bibigpt/components/ActionsAfterResult.tsx(4,32): error TS2307: Cannot find module '~/hooks/notes/flomo' or its corresponding type declarations.
+tmp_bibigpt/components/ActionsAfterResult.tsx(5,27): error TS2307: Cannot find module '~/hooks/notes/lark' or its corresponding type declarations.
+tmp_bibigpt/components/ActionsAfterResult.tsx(6,33): error TS2307: Cannot find module '~/hooks/useLocalStorage' or its corresponding type declarations.
+tmp_bibigpt/components/CommandMenu.tsx(10,8): error TS2307: Cannot find module '@/components/ui/command' or its corresponding type declarations.
+tmp_bibigpt/components/Footer.tsx(2,28): error TS2307: Cannot find module '~/components/mode-toggle' or its corresponding type declarations.
+tmp_bibigpt/components/Header.tsx(1,25): error TS2307: Cannot find module '@next/font/google' or its corresponding type declarations.
+tmp_bibigpt/components/Header.tsx(5,20): error TS2307: Cannot find module '~/components/SignIn' or its corresponding type declarations.
+tmp_bibigpt/components/Header.tsx(6,57): error TS2307: Cannot find module '~/components/ui/tooltip' or its corresponding type declarations.
+tmp_bibigpt/components/Header.tsx(7,29): error TS2307: Cannot find module '~/utils/constants' or its corresponding type declarations.
+tmp_bibigpt/components/icons.tsx(31,20): error TS2749: 'LucideIcon' refers to a value, but is being used as a type here. Did you mean 'typeof LucideIcon'?
+tmp_bibigpt/components/mode-toggle.tsx(4,26): error TS2307: Cannot find module 'next-themes' or its corresponding type declarations.
+tmp_bibigpt/components/mode-toggle.tsx(6,23): error TS2307: Cannot find module '@/components/icons' or its corresponding type declarations.
+tmp_bibigpt/components/PromptOptions.tsx(2,31): error TS2307: Cannot find module 'react-hook-form/dist/types/form' or its corresponding type declarations.
+tmp_bibigpt/components/PromptOptions.tsx(3,37): error TS2307: Cannot find module '~/utils/constants/language' or its corresponding type declarations.
+tmp_bibigpt/components/Sentence.tsx(1,46): error TS2307: Cannot find module '~/utils/extractSentenceWithTimestamp' or its corresponding type declarations.
+tmp_bibigpt/components/Sentence.tsx(2,47): error TS2307: Cannot find module '~/utils/extractTimestamp' or its corresponding type declarations.
+tmp_bibigpt/components/shared/leaflet.tsx(2,55): error TS2307: Cannot find module 'framer-motion' or its corresponding type declarations.
+tmp_bibigpt/components/shared/modal.tsx(2,23): error TS2307: Cannot find module 'focus-trap-react' or its corresponding type declarations.
+tmp_bibigpt/components/shared/modal.tsx(3,41): error TS2307: Cannot find module 'framer-motion' or its corresponding type declarations.
+tmp_bibigpt/components/shared/modal.tsx(5,27): error TS2307: Cannot find module '~/hooks/use-window-size' or its corresponding type declarations.
+tmp_bibigpt/components/shared/modal.tsx(49,33): error TS7006: Parameter 'e' implicitly has an 'any' type.
+tmp_bibigpt/components/shared/popover.tsx(3,27): error TS2307: Cannot find module '~/hooks/use-window-size' or its corresponding type declarations.
+tmp_bibigpt/components/sign-in-modal.tsx(1,35): error TS2307: Cannot find module '@supabase/auth-helpers-react' or its corresponding type declarations.
+tmp_bibigpt/components/sign-in-modal.tsx(2,22): error TS2307: Cannot find module '@supabase/auth-ui-react' or its corresponding type declarations.
+tmp_bibigpt/components/sign-in-modal.tsx(3,27): error TS2307: Cannot find module '@supabase/auth-ui-shared' or its corresponding type declarations.
+tmp_bibigpt/components/sign-in-modal.tsx(7,30): error TS2307: Cannot find module '~/components/context/analytics' or its corresponding type declarations.
+tmp_bibigpt/components/sign-in-modal.tsx(8,19): error TS2307: Cannot find module '~/components/shared/modal' or its corresponding type declarations.
+tmp_bibigpt/components/sign-in-modal.tsx(9,62): error TS2307: Cannot find module '~/utils/constants' or its corresponding type declarations.
+tmp_bibigpt/components/sign-in-modal.tsx(10,32): error TS2307: Cannot find module '~/utils/getRedirectUrl' or its corresponding type declarations.
+tmp_bibigpt/components/SignIn.tsx(1,25): error TS2307: Cannot find module '@supabase/auth-helpers-react' or its corresponding type declarations.
+tmp_bibigpt/components/SignIn.tsx(2,41): error TS2307: Cannot find module 'framer-motion' or its corresponding type declarations.
+tmp_bibigpt/components/SignIn.tsx(3,30): error TS2307: Cannot find module '~/components/context/analytics' or its corresponding type declarations.
+tmp_bibigpt/components/SignIn.tsx(4,26): error TS2307: Cannot find module '~/components/user-dropdown' or its corresponding type declarations.
+tmp_bibigpt/components/SignIn.tsx(5,44): error TS2307: Cannot find module '~/utils/constants' or its corresponding type declarations.
+tmp_bibigpt/components/SummaryResult.tsx(1,22): error TS2307: Cannot find module 'marked-react' or its corresponding type declarations.
+tmp_bibigpt/components/SummaryResult.tsx(3,36): error TS2307: Cannot find module '~/components/ActionsAfterResult' or its corresponding type declarations.
+tmp_bibigpt/components/SummaryResult.tsx(4,22): error TS2307: Cannot find module '~/components/Sentence' or its corresponding type declarations.
+tmp_bibigpt/components/SummaryResult.tsx(5,26): error TS2307: Cannot find module '~/hooks/use-toast' or its corresponding type declarations.
+tmp_bibigpt/components/SummaryResult.tsx(6,31): error TS2307: Cannot find module '~/utils/formatSummary' or its corresponding type declarations.
+tmp_bibigpt/components/SwitchTimestamp.tsx(2,23): error TS2307: Cannot find module '~/components/ui/label' or its corresponding type declarations.
+tmp_bibigpt/components/SwitchTimestamp.tsx(3,24): error TS2307: Cannot find module '~/components/ui/switch' or its corresponding type declarations.
+tmp_bibigpt/components/TypingSlogan.tsx(2,31): error TS2307: Cannot find module 'react-type-animation' or its corresponding type declarations.
+tmp_bibigpt/components/TypingSlogan.tsx(3,27): error TS2307: Cannot find module '~/components/SquigglyLines' or its corresponding type declarations.
+tmp_bibigpt/components/ui/command.tsx(5,62): error TS2307: Cannot find module 'cmdk' or its corresponding type declarations.
+tmp_bibigpt/components/ui/dialog.tsx(13,25): error TS2339: Property 'className' does not exist on type 'DialogPortalProps'.
+tmp_bibigpt/components/ui/dialog.tsx(14,27): error TS2322: Type '{ children: Element; container?: Element | DocumentFragment | null | undefined; forceMount?: true | undefined; className: string; }' is not assignable to type 'IntrinsicAttributes & DialogPortalProps'.
+  Property 'className' does not exist on type 'IntrinsicAttributes & DialogPortalProps'.
+tmp_bibigpt/components/ui/switch-item.tsx(2,23): error TS2307: Cannot find module '~/components/ui/label' or its corresponding type declarations.
+tmp_bibigpt/components/ui/switch-item.tsx(3,24): error TS2307: Cannot find module '~/components/ui/switch' or its corresponding type declarations.
+tmp_bibigpt/components/ui/toaster.tsx(3,26): error TS2307: Cannot find module '@/hooks/use-toast' or its corresponding type declarations.
+tmp_bibigpt/components/ui/toaster.tsx(5,95): error TS2307: Cannot find module '@/components/ui/toast' or its corresponding type declarations.
+tmp_bibigpt/components/ui/toaster.tsx(12,31): error TS7031: Binding element 'id' implicitly has an 'any' type.
+tmp_bibigpt/components/ui/toaster.tsx(12,35): error TS7031: Binding element 'title' implicitly has an 'any' type.
+tmp_bibigpt/components/ui/toaster.tsx(12,42): error TS7031: Binding element 'description' implicitly has an 'any' type.
+tmp_bibigpt/components/ui/toaster.tsx(12,55): error TS7031: Binding element 'action' implicitly has an 'any' type.
+tmp_bibigpt/components/user-dropdown.tsx(1,44): error TS2307: Cannot find module '@supabase/auth-helpers-react' or its corresponding type declarations.
+tmp_bibigpt/components/user-dropdown.tsx(2,24): error TS2307: Cannot find module 'framer-motion' or its corresponding type declarations.
+tmp_bibigpt/components/user-dropdown.tsx(6,21): error TS2307: Cannot find module '~/components/shared/popover' or its corresponding type declarations.
+tmp_bibigpt/components/user-dropdown.tsx(7,44): error TS2307: Cannot find module '~/utils/constants' or its corresponding type declarations.
+tmp_bibigpt/components/UserKeyInput.tsx(2,30): error TS2307: Cannot find module '~/components/context/analytics' or its corresponding type declarations.
+tmp_bibigpt/components/UserKeyInput.tsx(3,48): error TS2307: Cannot find module '~/utils/constants' or its corresponding type declarations.
+tmp_bibigpt/hooks/notes/flomo.ts(2,30): error TS2307: Cannot find module '~/components/context/analytics' or its corresponding type declarations.
+tmp_bibigpt/hooks/notes/flomo.ts(3,26): error TS2307: Cannot find module '~/hooks/use-toast' or its corresponding type declarations.
+tmp_bibigpt/hooks/notes/lark.ts(2,30): error TS2307: Cannot find module '~/components/context/analytics' or its corresponding type declarations.
+tmp_bibigpt/hooks/notes/lark.ts(3,26): error TS2307: Cannot find module '~/hooks/use-toast' or its corresponding type declarations.
+tmp_bibigpt/hooks/use-toast.ts(4,53): error TS2307: Cannot find module '@/components/ui/toast' or its corresponding type declarations.
+tmp_bibigpt/hooks/use-toast.ts(155,22): error TS7006: Parameter 'open' implicitly has an 'any' type.
+tmp_bibigpt/hooks/useSummarize.ts(2,26): error TS2307: Cannot find module '~/hooks/use-toast' or its corresponding type declarations.
+tmp_bibigpt/hooks/useSummarize.ts(3,41): error TS2307: Cannot find module '~/lib/types' or its corresponding type declarations.
+tmp_bibigpt/hooks/useSummarize.ts(4,34): error TS2307: Cannot find module '~/utils/constants' or its corresponding type declarations.
+tmp_bibigpt/lib/bilibili/fetchBilibiliSubtitle.ts(1,49): error TS2307: Cannot find module '~/utils/reduceSubtitleTimestamp' or its corresponding type declarations.
+tmp_bibigpt/lib/bilibili/fetchBilibiliSubtitleUrls.ts(1,30): error TS2307: Cannot find module '~/utils/fp' or its corresponding type declarations.
+tmp_bibigpt/lib/lemon.ts(1,23): error TS2307: Cannot find module '~/utils/env' or its corresponding type declarations.
+tmp_bibigpt/lib/openai/fetchOpenAIResult.ts(1,23): error TS2307: Cannot find module '@upstash/redis' or its corresponding type declarations.
+tmp_bibigpt/lib/openai/fetchOpenAIResult.ts(2,24): error TS2305: Module '"eventsource-parser"' has no exported member 'ParsedEvent'.
+tmp_bibigpt/lib/openai/fetchOpenAIResult.ts(2,37): error TS2305: Module '"eventsource-parser"' has no exported member 'ReconnectInterval'.
+tmp_bibigpt/lib/openai/fetchOpenAIResult.ts(3,34): error TS2307: Cannot find module '~/lib/openai/trimOpenAiResult' or its corresponding type declarations.
+tmp_bibigpt/lib/openai/fetchOpenAIResult.ts(4,29): error TS2307: Cannot find module '~/lib/types' or its corresponding type declarations.
+tmp_bibigpt/lib/openai/fetchOpenAIResult.ts(5,23): error TS2307: Cannot find module '~/utils/env' or its corresponding type declarations.
+tmp_bibigpt/lib/openai/fetchOpenAIResult.ts(6,28): error TS2307: Cannot find module '~/utils/getCacheId' or its corresponding type declarations.
+tmp_bibigpt/lib/openai/fetchOpenAIResult.ts(102,35): error TS2559: Type '(event: any) => Promise<void>' has no properties in common with type 'ParserCallbacks'.
+tmp_bibigpt/lib/openai/prompt.ts(1,43): error TS2307: Cannot find module '~/lib/openai/getSmallSizeTranscripts' or its corresponding type declarations.
+tmp_bibigpt/lib/openai/prompt.ts(2,29): error TS2307: Cannot find module '~/lib/types' or its corresponding type declarations.
+tmp_bibigpt/lib/openai/prompt.ts(3,55): error TS2307: Cannot find module '~/utils/constants/language' or its corresponding type declarations.
+tmp_bibigpt/lib/openai/selectApiKeyAndActivatedLicenseKey.ts(1,36): error TS2307: Cannot find module '~/lib/lemon' or its corresponding type declarations.
+tmp_bibigpt/lib/openai/selectApiKeyAndActivatedLicenseKey.ts(2,36): error TS2307: Cannot find module '~/lib/openai/checkOpenaiApiKey' or its corresponding type declarations.
+tmp_bibigpt/lib/openai/selectApiKeyAndActivatedLicenseKey.ts(3,24): error TS2307: Cannot find module '~/utils/fp' or its corresponding type declarations.
+tmp_bibigpt/lib/supabase.ts(1,30): error TS2307: Cannot find module '@supabase/supabase-js' or its corresponding type declarations.
+tmp_bibigpt/lib/types.ts(1,35): error TS2307: Cannot find module '~/utils/schemas/video' or its corresponding type declarations.
+tmp_bibigpt/lib/upstash.ts(1,27): error TS2307: Cannot find module '@upstash/ratelimit' or its corresponding type declarations.
+tmp_bibigpt/lib/upstash.ts(2,23): error TS2307: Cannot find module '@upstash/redis' or its corresponding type declarations.
+tmp_bibigpt/lib/upstash.ts(3,53): error TS2307: Cannot find module '~/utils/constants' or its corresponding type declarations.
+tmp_bibigpt/lib/youtube/fetchYoutubeSubtitle.ts(1,67): error TS2307: Cannot find module '~/lib/youtube/fetchYoutubeSubtitleUrls' or its corresponding type declarations.
+tmp_bibigpt/lib/youtube/fetchYoutubeSubtitle.ts(2,22): error TS2307: Cannot find module '~/utils/fp' or its corresponding type declarations.
+tmp_bibigpt/lib/youtube/fetchYoutubeSubtitle.ts(3,48): error TS2307: Cannot find module '~/utils/reduceSubtitleTimestamp' or its corresponding type declarations.
+tmp_bibigpt/middleware.ts(1,48): error TS2307: Cannot find module '@supabase/auth-helpers-nextjs' or its corresponding type declarations.
+tmp_bibigpt/middleware.ts(2,23): error TS2307: Cannot find module '@upstash/redis' or its corresponding type declarations.
+tmp_bibigpt/middleware.ts(5,33): error TS2307: Cannot find module '~/lib/types' or its corresponding type declarations.
+tmp_bibigpt/middleware.ts(6,28): error TS2307: Cannot find module '~/utils/getCacheId' or its corresponding type declarations.
+tmp_bibigpt/middleware.ts(45,30): error TS2339: Property 'ip' does not exist on type 'NextRequest'.
+tmp_bibigpt/pages/[...slug].tsx(1,29): error TS2307: Cannot find module '@hookform/resolvers/zod' or its corresponding type declarations.
+tmp_bibigpt/pages/[...slug].tsx(2,24): error TS2307: Cannot find module 'get-video-id' or its corresponding type declarations.
+tmp_bibigpt/pages/[...slug].tsx(7,40): error TS2307: Cannot find module 'react-hook-form' or its corresponding type declarations.
+tmp_bibigpt/pages/[...slug].tsx(8,28): error TS2307: Cannot find module 'react-hook-form-persist' or its corresponding type declarations.
+tmp_bibigpt/pages/[...slug].tsx(9,30): error TS2307: Cannot find module '~/components/context/analytics' or its corresponding type declarations.
+tmp_bibigpt/pages/[...slug].tsx(10,31): error TS2307: Cannot find module '~/components/PromptOptions' or its corresponding type declarations.
+tmp_bibigpt/pages/[...slug].tsx(11,30): error TS2307: Cannot find module '~/components/SubmitButton' or its corresponding type declarations.
+tmp_bibigpt/pages/[...slug].tsx(12,31): error TS2307: Cannot find module '~/components/SummaryResult' or its corresponding type declarations.
+tmp_bibigpt/pages/[...slug].tsx(13,30): error TS2307: Cannot find module '~/components/TypingSlogan' or its corresponding type declarations.
+tmp_bibigpt/pages/[...slug].tsx(14,29): error TS2307: Cannot find module '~/components/UsageAction' or its corresponding type declarations.
+tmp_bibigpt/pages/[...slug].tsx(15,34): error TS2307: Cannot find module '~/components/UsageDescription' or its corresponding type declarations.
+tmp_bibigpt/pages/[...slug].tsx(16,30): error TS2307: Cannot find module '~/components/UserKeyInput' or its corresponding type declarations.
+tmp_bibigpt/pages/[...slug].tsx(17,26): error TS2307: Cannot find module '~/hooks/use-toast' or its corresponding type declarations.
+tmp_bibigpt/pages/[...slug].tsx(18,33): error TS2307: Cannot find module '~/hooks/useLocalStorage' or its corresponding type declarations.
+tmp_bibigpt/pages/[...slug].tsx(19,30): error TS2307: Cannot find module '~/hooks/useSummarize' or its corresponding type declarations.
+tmp_bibigpt/pages/[...slug].tsx(20,30): error TS2307: Cannot find module '~/lib/types' or its corresponding type declarations.
+tmp_bibigpt/pages/[...slug].tsx(21,34): error TS2307: Cannot find module '~/utils/constants/language' or its corresponding type declarations.
+tmp_bibigpt/pages/[...slug].tsx(22,41): error TS2307: Cannot find module '~/utils/extractUrl' or its corresponding type declarations.
+tmp_bibigpt/pages/[...slug].tsx(23,35): error TS2307: Cannot find module '~/utils/getVideoIdFromUrl' or its corresponding type declarations.
+tmp_bibigpt/pages/[...slug].tsx(24,54): error TS2307: Cannot find module '~/utils/schemas/video' or its corresponding type declarations.
+tmp_bibigpt/pages/[...slug].tsx(146,65): error TS7006: Parameter 'data' implicitly has an 'any' type.
+tmp_bibigpt/pages/_app.tsx(1,35): error TS2307: Cannot find module '@next/font/google' or its corresponding type declarations.
+tmp_bibigpt/pages/_app.tsx(2,54): error TS2307: Cannot find module '@supabase/auth-helpers-nextjs' or its corresponding type declarations.
+tmp_bibigpt/pages/_app.tsx(3,40): error TS2307: Cannot find module '@supabase/auth-helpers-react' or its corresponding type declarations.
+tmp_bibigpt/pages/_app.tsx(4,27): error TS2307: Cannot find module '@vercel/analytics/react' or its corresponding type declarations.
+tmp_bibigpt/pages/_app.tsx(5,31): error TS2307: Cannot find module 'next-themes' or its corresponding type declarations.
+tmp_bibigpt/pages/_app.tsx(8,25): error TS2307: Cannot find module '~/components/CommandMenu' or its corresponding type declarations.
+tmp_bibigpt/pages/_app.tsx(9,35): error TS2307: Cannot find module '~/components/context/analytics' or its corresponding type declarations.
+tmp_bibigpt/pages/_app.tsx(10,32): error TS2307: Cannot find module '~/components/sign-in-modal' or its corresponding type declarations.
+tmp_bibigpt/pages/_app.tsx(11,35): error TS2307: Cannot find module '~/components/tailwind-indicator' or its corresponding type declarations.
+tmp_bibigpt/pages/_app.tsx(12,25): error TS2307: Cannot find module '~/components/ui/toaster' or its corresponding type declarations.
+tmp_bibigpt/pages/_app.tsx(13,33): error TS2307: Cannot find module '~/components/ui/tooltip' or its corresponding type declarations.
+tmp_bibigpt/pages/_app.tsx(14,20): error TS2307: Cannot find module '~/lib/utils' or its corresponding type declarations.
+tmp_bibigpt/pages/_document.tsx(2,29): error TS2307: Cannot find module '~/utils/constants' or its corresponding type declarations.
+tmp_bibigpt/pages/api/sumup.ts(3,31): error TS2307: Cannot find module '~/lib/fetchSubtitle' or its corresponding type declarations.
+tmp_bibigpt/pages/api/sumup.ts(4,49): error TS2307: Cannot find module '~/lib/openai/fetchOpenAIResult' or its corresponding type declarations.
+tmp_bibigpt/pages/api/sumup.ts(5,41): error TS2307: Cannot find module '~/lib/openai/getSmallSizeTranscripts' or its corresponding type declarations.
+tmp_bibigpt/pages/api/sumup.ts(6,75): error TS2307: Cannot find module '~/lib/openai/prompt' or its corresponding type declarations.
+tmp_bibigpt/pages/api/sumup.ts(7,52): error TS2307: Cannot find module '~/lib/openai/selectApiKeyAndActivatedLicenseKey' or its corresponding type declarations.
+tmp_bibigpt/pages/api/sumup.ts(8,33): error TS2307: Cannot find module '~/lib/types' or its corresponding type declarations.
+tmp_bibigpt/pages/api/sumup.ts(9,23): error TS2307: Cannot find module '~/utils/env' or its corresponding type declarations.
+tmp_bibigpt/pages/index.tsx(1,34): error TS2307: Cannot find module '@segment/analytics-next' or its corresponding type declarations.
+tmp_bibigpt/pages/index.tsx(2,44): error TS2307: Cannot find module '@segment/analytics-next/dist/types/core/analytics' or its corresponding type declarations.
+tmp_bibigpt/pages/index.tsx(5,30): error TS2307: Cannot find module '~/components/context/analytics' or its corresponding type declarations.
+tmp_bibigpt/pages/index.tsx(21,16): error TS2339: Property 'analytics' does not exist on type 'Window & typeof globalThis'.
+tmp_bibigpt/pages/shop.tsx(1,30): error TS2307: Cannot find module '~/components/context/analytics' or its corresponding type declarations.
+tmp_bibigpt/pages/shop.tsx(3,48): error TS2307: Cannot find module '~/utils/constants' or its corresponding type declarations.
+tmp_bibigpt/pages/user/dashboard.tsx(1,25): error TS2307: Cannot find module '~/components/sidebar' or its corresponding type declarations.
+tmp_bibigpt/pages/user/integration.tsx(2,25): error TS2307: Cannot find module '~/components/sidebar' or its corresponding type declarations.
+tmp_bibigpt/pages/user/integration.tsx(3,33): error TS2307: Cannot find module '~/hooks/useLocalStorage' or its corresponding type declarations.
+tmp_bibigpt/pages/user/videos.tsx(1,25): error TS2307: Cannot find module '~/components/sidebar' or its corresponding type declarations.
+tmp_bibigpt/pages/user/videos.tsx(2,35): error TS2307: Cannot find module 'react-bilibili-embed-renderer' or its corresponding type declarations.
+tmp_bibigpt/utils/formatSummary.ts(1,46): error TS2307: Cannot find module '~/utils/extractSentenceWithTimestamp' or its corresponding type declarations.
+tmp_bibigpt/utils/formatSummary.ts(2,34): error TS2307: Cannot find module '~/utils/extractTimestamp' or its corresponding type declarations.
+tmp_bibigpt/utils/getCacheId.ts(1,29): error TS2307: Cannot find module '~/lib/types' or its corresponding type declarations.
+tmp_bibigpt/utils/reduceSubtitleTimestamp.ts(1,36): error TS2307: Cannot find module '~/lib/types' or its corresponding type declarations.

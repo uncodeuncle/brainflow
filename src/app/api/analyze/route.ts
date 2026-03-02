@@ -185,7 +185,7 @@ export async function POST(req: Request) {
                             uploader,
                             thumbnail: pic.replace('http://', 'https://'),
                             entries: biliData.data.pages.map((p: any) => ({
-                                id: bvidStr,
+                                id: `${bvidStr}_p${p.page}`,
                                 title: p.part || `P${p.page}`,
                                 duration: p.duration,
                                 index: p.page,
