@@ -197,7 +197,7 @@ export default function Home() {
             BrainFlow / 脑流
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto font-normal leading-relaxed">
-            把视频、本地音视频与冗长文档即刻脱水，将知识点榨成脑流。
+            把网络视频、本地音视频与冗长文档即刻脱水，将知识点榨成脑流。
           </p>
         </div>
 

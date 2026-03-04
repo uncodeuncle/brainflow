@@ -250,12 +250,20 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                         console.log(`[P${item.index}] 📝 纯文本解析完成 (${fullText.length} 字符)`);
                     } else if (docExtensions.includes(localExtension)) {
                         if (localExtension === '.pdf') {
-                            const pdfParse = require('pdf-parse');
+                            const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
                             const dataBuffer = fs.readFileSync(localRawFilePath);
-                            const pdfData = await pdfParse(dataBuffer);
-                            fullText = pdfData.text;
+                            const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(dataBuffer) });
+                            const pdfDoc = await loadingTask.promise;
+                            const pageTexts: string[] = [];
+                            for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+                                const page = await pdfDoc.getPage(pageNum);
+                                const textContent = await page.getTextContent();
+                                const pageText = textContent.items.map((item: any) => item.str).join(' ');
+                                pageTexts.push(pageText);
+                            }
+                            fullText = pageTexts.join('\n');
                         } else if (localExtension === '.docx') {
-                            const mammoth = require('mammoth');
+                            const { default: mammoth } = await import('mammoth');
                             const result = await mammoth.extractRawText({ path: localRawFilePath });
                             fullText = result.value;
                         } else {
