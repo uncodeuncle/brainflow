@@ -100,7 +100,7 @@ async function runStorageSanitation() {
     }
 })();
 
-console.log("启动 BiliBrain 后台任务队列处理模块 (Worker)...等待任务接入中...");
+console.log("启动 BrainFlow 后台任务队列处理模块 (Worker)...等待任务接入中...");
 
 const worker = new Worker('bili-extract', async (job: Job) => {
     console.log(`\n===========================================`)
@@ -200,98 +200,163 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                 let fullText = '';
                 let transcriptionMethod = '';
 
-                // 【核心修复】：解析 item.id 中的 BV号 和 分P号
-                // yt-dlp 对多P视频可能返回 id=BV1NCgVzoEG9_p2 格式，需要拆分
-                let realBvid = '';
-                let realPage = 1; // 视频内部的分P号 (1-based)
-                if (item.id && item.id.startsWith('BV')) {
-                    const pageMatch = item.id.match(/^(BV[a-zA-Z0-9]+?)(?:_p(\d+))?$/);
-                    if (pageMatch) {
-                        realBvid = pageMatch[1];
-                        realPage = pageMatch[2] ? parseInt(pageMatch[2]) : 1;
-                    } else {
-                        realBvid = item.id;
-                    }
-                }
-
-                // 根据解析出的信息配置 yt-dlp 目标
-                let ytdlpTargetUrl = cleanUrl;
-                let ytdlpTargetOptions = `--playlist-items ${item.index}`;
-
-                if (item.url) {
-                    ytdlpTargetUrl = item.url;
-                    ytdlpTargetOptions = `--playlist-items 1`;
-                } else if (realBvid) {
-                    const parentBvid = cleanUrl.match(/BV[a-zA-Z0-9]+/)?.[0];
-                    if (realBvid !== parentBvid) {
-                        ytdlpTargetUrl = `https://www.bilibili.com/video/${realBvid}/`;
-                        // 如果是多P视频的某一P，用 --playlist-items 定位
-                        ytdlpTargetOptions = `--playlist-items ${realPage}`;
-                    }
-                }
-
-                console.log(`[DEBUG-YTDLP] P${item.index} 准备兜底提取`);
-                console.log(`[DEBUG-YTDLP] 传入参数: item.url=${item.url}, item.id=${item.id}, realBvid=${realBvid}, realPage=${realPage}, cleanUrl=${cleanUrl}`);
-                console.log(`[DEBUG-YTDLP] 最终决定 yt-dlp 目标 URL: ${ytdlpTargetUrl}`);
-                console.log(`[DEBUG-YTDLP] 最终决定 yt-dlp 列表参数: ${ytdlpTargetOptions}`);
-
-                // --------------- 优先级一：源平台 API 字幕直取 (0成本, 秒级) ---------------
-                console.log(`[P${item.index}] 🚀 尝试源平台 API 字幕直取...`);
-                await safeUpdateProgress({ step: 'transcribe', p: item.index, message: '正在提取核心信息...', percent: Math.round(baseProgress + stepProgress * 1), partialResults: results });
-
                 // SESSDATA: 1) 用户扫码存 localStorage → 前端传入 2) .env 环境变量
                 const rawSessdata = job.data.sessdata || process.env.BILIBILI_SESSION_TOKEN?.replace(/['"]/g, '').trim();
                 // 必须进行 URI 编码，防止用户传入的 SESSDATA 带有分号、逗号、星号等导致解析 Cookie 失败并返回 -412
                 const sessdata = rawSessdata ? encodeURIComponent(decodeURIComponent(rawSessdata)) : undefined;
 
-                if (!sessdata) {
-                    console.log(`[P${item.index}] ⚠️ 未提供 SESSDATA，API 可能无法返回完整字幕数据`);
-                } else {
-                    console.log(`[P${item.index}] 🔑 SESSDATA 已就绪 (编码后长: ${sessdata.length})`);
-                }
-                // 尝试从 yt-dlp 抓取的单视频 ID 中提前获取 BV 号 (处理短链接或播放列表的场景)
-                // 使用解析后的真实 BV 号和真实分P号（非合集序号）调用字幕 API
-                const identifierForSubtitle = realBvid || rawUrl;
-                const pageForSubtitle = realBvid ? realPage : item.index;
-                console.log(`[P${item.index}] 字幕查询: bvid=${identifierForSubtitle}, page=${pageForSubtitle}`);
-                const subtitleResult = await fetchBilibiliSubtitle(identifierForSubtitle, pageForSubtitle, sessdata);
+                let isLocalTask = job.data.type === 'local' || !!item.localOssUrl;
+                let localRawFilePath = '';
+                let localExtension = '';
 
-                if (subtitleResult.success && subtitleResult.text.length > 50) {
-                    fullText = subtitleResult.text;
-                    transcriptionMethod = 'bilibili_api';
-                    console.log(`[P${item.index}] ✅ 字幕直取成功！(${fullText.length} 字符, 方法: ${transcriptionMethod})`);
-                } else {
-                    // --------------- 优先级二：yt-dlp --write-sub 提取字幕文件 ---------------
-                    console.log(`[P${item.index}] ⚠️ API 字幕不可用 (${subtitleResult.error}), 尝试 yt-dlp 字幕提取...`);
-                    await safeUpdateProgress({ step: 'transcribe', p: item.index, message: '正在提取内容...', percent: Math.round(baseProgress + stepProgress * 1.5), partialResults: results });
+                // 【分支一：本地上传直通车】
+                if (isLocalTask) {
+                    console.log(`[P${item.index}] 🏠 检测到本地上传任务，开始直接从 OSS 拉取源文件...`);
+                    await safeUpdateProgress({ step: 'download', p: item.index, message: '提取云端缓存资产...', percent: Math.round(baseProgress + stepProgress * 0.5), partialResults: results });
 
+                    const ossUrlMatch = item.localOssUrl?.match(/^oss:\/\/[^\/]+\/(.+)$/);
+                    if (!ossUrlMatch) throw new Error("无效的本地 OSS URL: " + item.localOssUrl);
+                    const objectName = ossUrlMatch[1];
+                    localExtension = path.extname(objectName).toLowerCase();
+                    localRawFilePath = path.join(hiddenDir, `${expectedBaseName}_raw${localExtension}`);
+
+                    await mediaSemaphore.acquire();
                     try {
-                        const subDir = path.join(hiddenDir, 'subs');
-                        if (!fs.existsSync(subDir)) fs.mkdirSync(subDir, { recursive: true });
+                        const cleanRegion = (process.env.ALIYUN_OSS_REGION || '').replace(/['"]/g, '').replace('.aliyuncs.com', '').trim();
+                        const cleanBucket = (process.env.ALIYUN_OSS_BUCKET || '').replace(/['"]/g, '').trim().replace(/[^a-z0-9-]/g, '');
+                        const client = new OSS({ region: cleanRegion, accessKeyId: cleanKeyId, accessKeySecret: cleanKeySecret, bucket: cleanBucket, secure: true });
+                        await client.get(objectName, localRawFilePath);
+                        console.log(`[P${item.index}] ✅ 成功拉取本地源文件: ${localRawFilePath}`);
+                    } catch (err) {
+                        throw new Error("从 OSS 拉取上传文件失败: " + String(err));
+                    } finally {
+                        mediaSemaphore.release();
+                    }
 
-                        const subOutputTemplate = path.join(subDir, `${expectedBaseName}.%(ext)s`);
-                        const subCommand = `"${ytdlpPath}" ${robustNetworkArgs} --write-sub --write-auto-sub --sub-lang "zh-Hans,zh-CN,zh,en" --skip-download --convert-subs srt -o "${subOutputTemplate}" ${ytdlpTargetOptions} "${ytdlpTargetUrl}"`;
-                        console.log(`[DEBUG-YTDLP] 执行字幕下载指令: ${subCommand}`);
-                        await execAsync(subCommand, { env });
+                    const textExtensions = ['.txt', '.md', '.csv', '.srt', '.vtt'];
+                    const docExtensions = ['.pdf', '.docx', '.doc'];
 
-                        // 查找下载下来的字幕文件
-                        const subFiles = fs.readdirSync(subDir).filter(f => f.startsWith(expectedBaseName) && (f.endsWith('.srt') || f.endsWith('.vtt')));
-                        if (subFiles.length > 0) {
-                            const subContent = fs.readFileSync(path.join(subDir, subFiles[0]), 'utf-8');
-                            // 清洗 SRT 格式：去掉序号、时间戳行，只留文字
-                            fullText = subContent
-                                .replace(/^\d+\s*$/gm, '')              // 序号行
-                                .replace(/\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[,.]\d{3}/g, '') // 时间戳行
-                                .replace(/<[^>]+>/g, '')                 // HTML 标签
-                                .replace(/\n{2,}/g, ' ')                 // 多余换行
+                    if (textExtensions.includes(localExtension)) {
+                        fullText = fs.readFileSync(localRawFilePath, 'utf-8');
+                        if (['.srt', '.vtt'].includes(localExtension)) {
+                            fullText = fullText
+                                .replace(/^\d+\s*$/gm, '')
+                                .replace(/\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[,.]\d{3}/g, '')
+                                .replace(/<{1}[^>]+>{1}/g, '')
+                                .replace(/\n{2,}/g, ' ')
                                 .trim();
-                            transcriptionMethod = 'yt-dlp_subtitle';
-                            console.log(`[P${item.index}] ✅ yt-dlp 字幕提取成功！(${fullText.length} 字符)`);
                         }
-                    } catch (subErr: any) {
-                        console.warn(`[P${item.index}] yt-dlp 字幕提取失败:`, subErr.message);
+                        transcriptionMethod = 'local_text';
+                        console.log(`[P${item.index}] 📝 纯文本解析完成 (${fullText.length} 字符)`);
+                    } else if (docExtensions.includes(localExtension)) {
+                        if (localExtension === '.pdf') {
+                            const pdfParse = require('pdf-parse');
+                            const dataBuffer = fs.readFileSync(localRawFilePath);
+                            const pdfData = await pdfParse(dataBuffer);
+                            fullText = pdfData.text;
+                        } else if (localExtension === '.docx') {
+                            const mammoth = require('mammoth');
+                            const result = await mammoth.extractRawText({ path: localRawFilePath });
+                            fullText = result.value;
+                        } else {
+                            throw new Error("暂不支持 .doc 格式，请用 .docx 或 PDF");
+                        }
+                        transcriptionMethod = 'local_document';
+                        console.log(`[P${item.index}] 📝 文档解析完成 (${fullText.length} 字符)`);
                     }
                 }
+
+                // 【分支二：网络链接抽取】
+                let realBvid = '';
+                let realPage = 1; // 视频内部的分P号 (1-based)
+
+                if (!isLocalTask) {
+                    // 【核心修复】：解析 item.id 中的 BV号 和 分P号
+                    if (item.id && item.id.startsWith('BV')) {
+                        const pageMatch = item.id.match(/^(BV[a-zA-Z0-9]+?)(?:_p(\d+))?$/);
+                        if (pageMatch) {
+                            realBvid = pageMatch[1];
+                            realPage = pageMatch[2] ? parseInt(pageMatch[2]) : 1;
+                        } else {
+                            realBvid = item.id;
+                        }
+                    }
+
+                    // 根据解析出的信息配置 yt-dlp 目标
+                    let ytdlpTargetUrl = cleanUrl;
+                    let ytdlpTargetOptions = `--playlist-items ${item.index}`;
+
+                    if (item.url) {
+                        ytdlpTargetUrl = item.url;
+                        ytdlpTargetOptions = `--playlist-items 1`;
+                    } else if (realBvid) {
+                        const parentBvid = cleanUrl.match(/BV[a-zA-Z0-9]+/)?.[0];
+                        if (realBvid !== parentBvid) {
+                            ytdlpTargetUrl = `https://www.bilibili.com/video/${realBvid}/`;
+                            // 如果是多P视频的某一P，用 --playlist-items 定位
+                            ytdlpTargetOptions = `--playlist-items ${realPage}`;
+                        }
+                    }
+
+                    console.log(`[DEBUG-YTDLP] P${item.index} 准备兜底提取`);
+                    console.log(`[DEBUG-YTDLP] 传入参数: item.url=${item.url}, item.id=${item.id}, realBvid=${realBvid}, realPage=${realPage}, cleanUrl=${cleanUrl}`);
+                    console.log(`[DEBUG-YTDLP] 最终决定 yt-dlp 目标 URL: ${ytdlpTargetUrl}`);
+                    console.log(`[DEBUG-YTDLP] 最终决定 yt-dlp 列表参数: ${ytdlpTargetOptions}`);
+
+                    // --------------- 优先级一：源平台 API 字幕直取 (0成本, 秒级) ---------------
+                    console.log(`[P${item.index}] 🚀 尝试源平台 API 字幕直取...`);
+                    await safeUpdateProgress({ step: 'transcribe', p: item.index, message: '正在提取核心信息...', percent: Math.round(baseProgress + stepProgress * 1), partialResults: results });
+
+                    if (!sessdata) {
+                        console.log(`[P${item.index}] ⚠️ 未提供 SESSDATA，API 可能无法返回完整字幕数据`);
+                    } else {
+                        console.log(`[P${item.index}] 🔑 SESSDATA 已就绪 (编码后长: ${sessdata.length})`);
+                    }
+                    // 尝试从 yt-dlp 抓取的单视频 ID 中提前获取 BV 号 (处理短链接或播放列表的场景)
+                    // 使用解析后的真实 BV 号和真实分P号（非合集序号）调用字幕 API
+                    const identifierForSubtitle = realBvid || rawUrl;
+                    const pageForSubtitle = realBvid ? realPage : item.index;
+                    console.log(`[P${item.index}] 字幕查询: bvid=${identifierForSubtitle}, page=${pageForSubtitle}`);
+                    const subtitleResult = await fetchBilibiliSubtitle(identifierForSubtitle, pageForSubtitle, sessdata);
+
+                    if (subtitleResult.success && subtitleResult.text.length > 50) {
+                        fullText = subtitleResult.text;
+                        transcriptionMethod = 'bilibili_api';
+                        console.log(`[P${item.index}] ✅ 字幕直取成功！(${fullText.length} 字符, 方法: ${transcriptionMethod})`);
+                    } else {
+                        // --------------- 优先级二：yt-dlp --write-sub 提取字幕文件 ---------------
+                        console.log(`[P${item.index}] ⚠️ API 字幕不可用 (${subtitleResult.error}), 尝试 yt-dlp 字幕提取...`);
+                        await safeUpdateProgress({ step: 'transcribe', p: item.index, message: '正在提取内容...', percent: Math.round(baseProgress + stepProgress * 1.5), partialResults: results });
+
+                        try {
+                            const subDir = path.join(hiddenDir, 'subs');
+                            if (!fs.existsSync(subDir)) fs.mkdirSync(subDir, { recursive: true });
+
+                            const subOutputTemplate = path.join(subDir, `${expectedBaseName}.%(ext)s`);
+                            const subCommand = `"${ytdlpPath}" ${robustNetworkArgs} --write-sub --write-auto-sub --sub-lang "zh-Hans,zh-CN,zh,en" --skip-download --convert-subs srt -o "${subOutputTemplate}" ${ytdlpTargetOptions} "${ytdlpTargetUrl}"`;
+                            console.log(`[DEBUG-YTDLP] 执行字幕下载指令: ${subCommand}`);
+                            await execAsync(subCommand, { env });
+
+                            // 查找下载下来的字幕文件
+                            const subFiles = fs.readdirSync(subDir).filter(f => f.startsWith(expectedBaseName) && (f.endsWith('.srt') || f.endsWith('.vtt')));
+                            if (subFiles.length > 0) {
+                                const subContent = fs.readFileSync(path.join(subDir, subFiles[0]), 'utf-8');
+                                // 清洗 SRT 格式：去掉序号、时间戳行，只留文字
+                                fullText = subContent
+                                    .replace(/^\d+\s*$/gm, '')              // 序号行
+                                    .replace(/\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[,.]\d{3}/g, '') // 时间戳行
+                                    .replace(/<[^>]+>/g, '')                 // HTML 标签
+                                    .replace(/\n{2,}/g, ' ')                 // 多余换行
+                                    .trim();
+                                transcriptionMethod = 'yt-dlp_subtitle';
+                                console.log(`[P${item.index}] ✅ yt-dlp 字幕提取成功！(${fullText.length} 字符)`);
+                            }
+                        } catch (subErr: any) {
+                            console.warn(`[P${item.index}] yt-dlp 字幕提取失败:`, subErr.message);
+                        }
+                    }
+
+                } // ← end of !isLocalTask block
 
                 // --------------- 优先级三：兜底 - 下载音频 + 阿里云 NLS 转录 (有成本) ---------------
                 if (!fullText || fullText.length < 50) {
@@ -306,7 +371,10 @@ const worker = new Worker('bili-extract', async (job: Job) => {
 
                     await mediaSemaphore.acquire(); // 获取媒体 slot
                     try {
-                        if (realBvid) {
+                        if (isLocalTask) {
+                            rawAudioFilePath = localRawFilePath;
+                            console.log(`[P${item.index}] 🔊 本地音频/视频文件已就绪，准备进入语音识别管道...`);
+                        } else if (realBvid) {
                             console.log(`[P${item.index}] 🔊 通过原生 API 下载音频用于语音转文字 (B站高速通道)...`);
                             const audioTargetUrl = `https://www.bilibili.com/video/${realBvid}/`;
                             const audioMediaResult = await fetchBilibiliMedia(
@@ -404,7 +472,21 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                     const vp = (async () => {
                         await mediaSemaphore.acquire(); // 获取媒体下载 slot
                         try {
-                            if (realBvid) {
+                            if (isLocalTask) {
+                                const isVideo = ['.mp4', '.mkv', '.mov', '.avi', '.flv', '.wmv', '.webm', '.m4v'].includes(localExtension);
+                                if (isVideo) {
+                                    console.log(`[P${item.index}] 🎬 本地视频：拷贝本地缓冲用于打包分发...`);
+                                    const mergedPath = path.join(publicDir, `${expectedBaseName}.mp4`);
+                                    try {
+                                        await execAsync(`ffmpeg -y -i "${localRawFilePath}" -c copy "${mergedPath}"`, { env });
+                                    } catch (err: any) {
+                                        console.log(`[P${item.index}] FFmpeg快速容器写入失败，退化为直接拷贝...`);
+                                        fs.copyFileSync(localRawFilePath, mergedPath);
+                                    }
+                                    resultObj.videoUrl = `${process.env.NEXT_PUBLIC_BASE_PATH || ''}/downloads/${expectedBaseName}.mp4`;
+                                    resultObj.localPath = mergedPath;
+                                }
+                            } else if (realBvid) {
                                 console.log(`[P${item.index}] 🎬 通过原生 API 下载视频 (B站高速通道)...`);
                                 const videoTargetUrl = `https://www.bilibili.com/video/${realBvid}/`;
                                 const mediaResult = await fetchBilibiliMedia(
@@ -490,9 +572,10 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                             apiKey: deepseekKey
                         });
 
+                        // 动态切换知识库架构提示词，支持本地纯文档的自由时间提取
                         const systemPrompt = `你是一名极度理性的专属知识库架构师。
-核心任务是将视频文稿萃取为原子化、**树状层级**的知识卡片流 (Card Flow)。
-
+核心任务是将${isLocalTask ? '本地上传的多模态资源（如视频、会议纪要或纯文图资料）' : '视频文稿'}萃取为原子化、**树状层级**的知识卡片流 (Card Flow)。
+${isLocalTask ? '\n【时间戳动态处理指令 (针对本地合集)】\n识别输入内容的格式属性：如果文本存在明显的时间流标志（类似 [02:30]、1:23:45 甚至 "此时此刻" 等暗示时间轴的词汇），你必须在知识节点下提炼规整的 [MM:SS] 时间戳用于 timestamp 字段。\n如果整段文稿是纯阅读向的材料、论文或无时间顺序的纪要，请忽略 timestamp 字段并且【严禁】为了迎合结构强行编造 [00:00]。\n' : ''}
 【格式要求】
 必须严格输出以下格式的纯 JSON 数据，禁止任何 Markdown 代码块包装（不要 \`\`\`json 的 markdown 容器），直接以 { 开始，以 } 结束。
 

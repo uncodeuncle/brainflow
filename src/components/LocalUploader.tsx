@@ -163,7 +163,7 @@ export function LocalUploader({ onUploadComplete, onCancel }: LocalUploaderProps
             <div className="flex justify-between items-center p-4 border-b border-border bg-slate-50/50">
                 <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
                     <Upload className="w-4 h-4 text-primary" />
-                    本地文件高速直传 (阿里云 OSS)
+                    上传本地文件
                 </h3>
                 {!isUploading && (
                     <Button variant="ghost" size="icon" onClick={onCancel} className="h-6 w-6 rounded-full hover:bg-slate-200 text-slate-500">
@@ -187,7 +187,7 @@ export function LocalUploader({ onUploadComplete, onCancel }: LocalUploaderProps
                         </div>
                         <p className="font-semibold text-slate-700 mb-1">点击选择 或 拖拽文件到这里</p>
                         <p className="text-xs text-muted-foreground max-w-sm text-center">
-                            支持音视频 (.mp4, .mp3, .m4a等) 与文档 (.pdf, .txt, .docx等)。可批量拖入文件夹或多个文件。系统将直传 OSS，不占用本服务器宽带。
+                            支持音视频 (.mp4, .mp3, .m4a等) 与文档 (.pdf, .txt, .docx等)。可批量拖入文件夹或多个文件。
                         </p>
                     </div>
                 )}
@@ -277,7 +277,7 @@ export function LocalUploader({ onUploadComplete, onCancel }: LocalUploaderProps
                                 ) : files.every(f => f.status === 'success') ? (
                                     <><CheckCircle2 className="w-4 h-4 mr-2" /> 准备就绪</>
                                 ) : (
-                                    `开始直传 (${files.length})`
+                                    `开始上传 (${files.length})`
                                 )}
                             </Button>
                         </div>

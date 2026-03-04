@@ -18,7 +18,7 @@ export function TextKnowledgeTree({ globalTitle, chapters, terms }: TextKnowledg
     }
 
     const renderContentWithTerms = (text: string) => {
-        if (!terms || terms.length === 0) return <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>;
+        if (!terms || terms.length === 0) return <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ p: 'span' }}>{text}</ReactMarkdown>;
 
         const sortedTerms = [...terms].sort((a, b) => b.term.length - a.term.length);
         const termRegex = new RegExp(`(${sortedTerms.map(t => t.term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'g');

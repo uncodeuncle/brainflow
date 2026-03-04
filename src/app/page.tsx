@@ -101,8 +101,9 @@ export default function Home() {
       thumbnail: '', // We will show a default SVG in Reader
       isLocal: true,
       entries: uploadedFiles.map((f, i) => ({
+        index: i + 1,
         page: i + 1,
-        title: f.name,
+        title: f.name.replace(/\.[^/.]+$/, ""),
         duration: 0,
         dimension: { width: 1920, height: 1080 },
         // Attach the OSS URL directly to the entry so the API/Worker knows where to pull it from
@@ -196,7 +197,7 @@ export default function Home() {
             BrainFlow / 脑流
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto font-normal leading-relaxed">
-            极速提纯 B站视频、本地音视频与冗长文档，压榨出结构化真知。
+            把视频、本地音视频与冗长文档即刻脱水，将知识点榨成脑流。
           </p>
         </div>
 
@@ -221,7 +222,7 @@ export default function Home() {
                 </div>
                 <Input
                   type="text"
-                  placeholder="粘贴 B23.tv 或 Bilibili 视频链接..."
+                  placeholder="粘贴视频链接至此..."
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   className="flex-1 bg-transparent border-0 h-14 text-lg focus-visible:ring-0 focus-visible:ring-offset-0 px-2 placeholder:text-muted-foreground/50 transition-all font-normal text-foreground"

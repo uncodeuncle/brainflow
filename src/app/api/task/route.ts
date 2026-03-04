@@ -16,7 +16,7 @@ export async function POST(req: Request) {
         // items: array of selected P items to download
         // formats: object indicating what to output (markdown, marp, mermaid, downloadVideo)
         // url: original Bilibili URL to download from string
-        const { items, formats, url, sessdata } = data;
+        const { items, formats, url, sessdata, type, rawData } = data;
 
         if (!items || items.length === 0) {
             return NextResponse.json({ error: 'No items selected' }, { status: 400 });
@@ -31,7 +31,9 @@ export async function POST(req: Request) {
             items,
             formats,
             url,
-            sessdata
+            sessdata,
+            type,       // Injected local tag boundary
+            rawData     // Injected local payload
         });
 
         return NextResponse.json({
