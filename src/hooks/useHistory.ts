@@ -8,6 +8,8 @@ export interface HistoryItem {
     uploader?: string;
     thumbnail?: string;
     timestamp: number;
+    /** Whether this was uploaded from local multi-file instead of Bilibili */
+    isLocal?: boolean;
     /** Complete analysis results (chapters, terms, transcription, etc.) */
     results?: any[];
     /** Inline Copilot conversation history */

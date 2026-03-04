@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
-import { Loader2, CheckCircle2, ChevronRight, Download, Share2, Sparkles } from "lucide-react";
+import { Loader2, CheckCircle2, ChevronRight, Download, Share2, Sparkles, MonitorPlay } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -28,7 +28,17 @@ const stripMarkdown = (text: string) => {
         .trim();
 };
 
-export function Reader({ jobId, onBack, saveResults, initialResults, initialCopilotHistory, updateCopilotHistory }: { jobId: string, onBack: () => void, saveResults?: (jobId: string, results: any[]) => Promise<void>, initialResults?: any[], initialCopilotHistory?: any[], updateCopilotHistory?: (jobId: string, history: any[]) => Promise<void> }) {
+interface ReaderProps {
+    jobId: string;
+    onBack: () => void;
+    saveResults?: (jobId: string, results: any[]) => Promise<void>;
+    initialResults?: any[];
+    initialCopilotHistory?: any[];
+    updateCopilotHistory?: (jobId: string, history: any[]) => Promise<void>;
+    isLocal?: boolean;
+}
+
+export function Reader({ jobId, onBack, saveResults, initialResults, initialCopilotHistory, updateCopilotHistory, isLocal }: ReaderProps) {
     const [status, setStatus] = useState<any>(initialResults ? { state: 'completed', result: { results: initialResults } } : null);
     const [activeIndex, setActiveIndex] = useState<number>(0);
     const [viewMode, setViewMode] = useState<'flow' | 'text'>('text');

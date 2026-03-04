@@ -13,6 +13,8 @@
   "dependencies": {
     "@alicloud/openapi-client": "^0.4.15",
     "@alicloud/pop-core": "^1.8.0",
+    "@alicloud/sts-sdk": "^1.0.2",
+    "@alicloud/sts20150401": "^1.2.0",
     "@alicloud/tea-util": "^1.4.11",
     "@tailwindcss/typography": "^0.5.19",
     "@types/archiver": "^7.0.0",
@@ -34,6 +36,7 @@
     "radix-ui": "^1.4.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "react-dropzone": "^15.0.0",
     "react-markdown": "^10.1.0",
     "react-resizable-panels": "^4.6.5",
     "reactflow": "^11.11.4",

@@ -10,6 +10,8 @@ import { BiliQRLogin, hasValidBiliAuth, getBiliSessdata } from "@/components/Bil
 import { useHistory } from "@/hooks/useHistory";
 import { getBasePath } from "@/lib/utils";
 
+import { LocalUploader } from "@/components/LocalUploader";
+
 function isBilibiliUrl(url: string): boolean {
   return url.includes('bilibili.com') || url.includes('b23.tv');
 }
@@ -21,6 +23,9 @@ export default function Home() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [showQRLogin, setShowQRLogin] = useState(false);
+
+  // Toggles the Local Uploader UI
+  const [showLocalUploader, setShowLocalUploader] = useState(false);
 
   const { history, isLoaded, addHistory, removeHistory, updateHistoryTitle, saveResults, exportHistory, importHistory, clearHistory, updateCopilotHistory } = useHistory();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -51,7 +56,6 @@ export default function Home() {
     e.preventDefault();
     if (!url) return;
 
-    // Smart intercept: 永远对 B站 新任务触发二维码扫码，确保 SESSDATA 最新不过期
     if (isBilibiliUrl(url)) {
       setShowQRLogin(true);
       return;
@@ -85,8 +89,30 @@ export default function Home() {
 
   const handleQRSuccess = (sessdata: string) => {
     setShowQRLogin(false);
-    // Auth obtained, auto-continue the original action
     doAnalyze();
+  };
+
+  // Called when LocalUploader finishes pushing to OSS
+  const handleLocalUploadComplete = (uploadedFiles: { name: string, url: string, size: number }[]) => {
+    // Generate a pseudo-analyzeData to reuse the task confirmation modal
+    const fauxAnalyzeData = {
+      title: uploadedFiles.length > 1 ? `本地合集：${uploadedFiles[0].name.replace(/\.[^/.]+$/, "")} 等${uploadedFiles.length}个文件` : uploadedFiles[0].name.replace(/\.[^/.]+$/, ""),
+      uploader: 'Local File',
+      thumbnail: '', // We will show a default SVG in Reader
+      isLocal: true,
+      entries: uploadedFiles.map((f, i) => ({
+        page: i + 1,
+        title: f.name,
+        duration: 0,
+        dimension: { width: 1920, height: 1080 },
+        // Attach the OSS URL directly to the entry so the API/Worker knows where to pull it from
+        localOssUrl: f.url
+      }))
+    };
+
+    setAnalyzeData(fauxAnalyzeData);
+    setShowLocalUploader(false);
+    setIsModalOpen(true); // Open the AnalyzeModal for final confirmation
   };
 
   const handleStartTask = async (config: any) => {
@@ -95,6 +121,14 @@ export default function Home() {
       // Pass sessdata from localStorage if available
       const sessdata = getBiliSessdata();
       const payload = { ...config, url, ...(sessdata ? { sessdata } : {}) };
+
+      // If it's a local task, we inject the local struct
+      if (analyzeData?.isLocal) {
+        payload.type = 'local';
+        payload.url = 'local_multi_upload';
+        payload.rawData = analyzeData; // this contains the entries with localOssUrl
+      }
+
       const res = await fetch(`${getBasePath()}/api/task`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -103,13 +137,13 @@ export default function Home() {
       const data = await res.json();
       if (res.ok) {
         // Append timestamp to BullMQ's sequential jobId to guarantee global uniqueness
-        // This prevents IndexedDB history collisions when the Redis queue is obliterated on Worker restart
         const uniqueJobId = `${data.jobId}_${Date.now()}`;
         addHistory({
           jobId: uniqueJobId,
-          title: config.rawData?.title || analyzeData?.title || config.rawData?.entries?.[0]?.title || analyzeData?.entries?.[0]?.title || '未命名合集任务',
-          uploader: config.rawData?.uploader || analyzeData?.uploader || config.rawData?.entries?.[0]?.uploader || analyzeData?.entries?.[0]?.uploader,
-          thumbnail: config.rawData?.thumbnail || analyzeData?.thumbnail || config.rawData?.entries?.[0]?.thumbnail || analyzeData?.entries?.[0]?.thumbnail,
+          title: analyzeData.isLocal ? analyzeData.title : (config.rawData?.title || analyzeData?.title || config.rawData?.entries?.[0]?.title || analyzeData?.entries?.[0]?.title || '未命名合集任务'),
+          uploader: analyzeData.isLocal ? 'Local File' : (config.rawData?.uploader || analyzeData?.uploader || config.rawData?.entries?.[0]?.uploader || analyzeData?.entries?.[0]?.uploader),
+          thumbnail: analyzeData.isLocal ? '' : (config.rawData?.thumbnail || analyzeData?.thumbnail || config.rawData?.entries?.[0]?.thumbnail || analyzeData?.entries?.[0]?.thumbnail),
+          isLocal: analyzeData.isLocal
         });
         setActiveJobId(uniqueJobId);
       } else {
@@ -132,7 +166,7 @@ export default function Home() {
 
   if (activeJobId) {
     const historicalItem = history.find(h => h.jobId === activeJobId);
-    return <Reader jobId={activeJobId} onBack={() => setActiveJobId(null)} saveResults={saveResults} initialResults={historicalItem?.results} initialCopilotHistory={historicalItem?.copilotHistory} updateCopilotHistory={updateCopilotHistory} />;
+    return <Reader jobId={activeJobId} onBack={() => setActiveJobId(null)} saveResults={saveResults} initialResults={historicalItem?.results} initialCopilotHistory={historicalItem?.copilotHistory} updateCopilotHistory={updateCopilotHistory} isLocal={historicalItem?.isLocal} />;
   }
 
   const hasHistory = isLoaded && history.length > 0;
@@ -147,7 +181,7 @@ export default function Home() {
           <Upload className="w-3.5 h-3.5 mr-1.5" /> 导入笔记
         </Button>
         <Button variant="outline" size="sm" onClick={() => exportHistory()} className="h-8 shadow-sm rounded-full border-border hover:border-primary hover:text-primary transition-colors text-xs text-muted-foreground bg-white/80 backdrop-blur-sm">
-          <Download className="w-3.5 h-3.5 mr-1.5" /> 导出笔记
+          <Download className="w-3.5 h-3.5 mr-1.5" /> 导出全部
         </Button>
       </div>
 
@@ -162,42 +196,65 @@ export default function Home() {
             BrainFlow / 脑流
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto font-normal leading-relaxed">
-            视频合集太多，进度条太长？立刻脱水，把知识点榨成脑流。
+            极速提纯 B站视频、本地音视频与冗长文档，压榨出结构化真知。
           </p>
         </div>
 
-        {/* Search Bar Block */}
-        <div className="w-full relative group shadow-[0_10px_30px_rgba(0,0,0,0.05)] hover:shadow-[0_15px_40px_rgba(200,78,24,0.15)] transition-shadow duration-300 rounded-[20px] bg-white border border-border">
-          <form
-            onSubmit={handleAnalyze}
-            className="relative flex items-center rounded-[20px] p-2"
-          >
-            <div className="pl-4 pr-2 text-muted-foreground group-focus-within:text-primary transition-colors">
-              <Search className="w-6 h-6" />
+        {/* Input Switcher Block */}
+        <div className="w-full relative group transition-shadow duration-300">
+
+          {showLocalUploader ? (
+            <div className="animate-in fade-in slide-in-from-top-4 duration-300">
+              <LocalUploader
+                onCancel={() => setShowLocalUploader(false)}
+                onUploadComplete={handleLocalUploadComplete}
+              />
             </div>
-            <Input
-              type="text"
-              placeholder="粘贴视频链接至此..."
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              className="flex-1 bg-transparent border-0 h-14 text-lg focus-visible:ring-0 focus-visible:ring-offset-0 px-2 placeholder:text-muted-foreground/50 transition-all font-normal text-foreground"
-              disabled={isAnalyzing}
-            />
-            <Button
-              type="submit"
-              disabled={!url || isAnalyzing}
-              className="h-12 px-8 ml-3 mr-1 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-base transition-all shadow-sm hover:-translate-y-[1px] disabled:opacity-50 disabled:hover:translate-y-0"
-            >
-              {isAnalyzing ? (
-                <>
-                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                  解析中...
-                </>
-              ) : (
-                "开始解析"
-              )}
-            </Button>
-          </form>
+          ) : (
+            <>
+              <form
+                onSubmit={handleAnalyze}
+                className="relative flex items-center rounded-[20px] p-2 bg-white border border-border shadow-[0_10px_30px_rgba(0,0,0,0.05)] hover:shadow-[0_15px_40px_rgba(200,78,24,0.15)] transition-shadow duration-300"
+              >
+                <div className="pl-4 pr-2 text-muted-foreground group-focus-within:text-primary transition-colors">
+                  <Search className="w-6 h-6" />
+                </div>
+                <Input
+                  type="text"
+                  placeholder="粘贴 B23.tv 或 Bilibili 视频链接..."
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  className="flex-1 bg-transparent border-0 h-14 text-lg focus-visible:ring-0 focus-visible:ring-offset-0 px-2 placeholder:text-muted-foreground/50 transition-all font-normal text-foreground"
+                  disabled={isAnalyzing}
+                />
+
+                <div
+                  className="mr-3 ml-2 flex cursor-pointer text-muted-foreground hover:text-primary transition-colors border-l border-border pl-4"
+                  title="上传本地文件 (视频/音频/PDF等)"
+                  onClick={() => setShowLocalUploader(true)}
+                >
+                  <Upload className="w-5 h-5" />
+                </div>
+
+                <Button
+                  type="submit"
+                  disabled={!url || isAnalyzing}
+                  className="h-12 px-8 mr-1 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-base transition-all shadow-sm hover:-translate-y-[1px] disabled:opacity-50 disabled:hover:translate-y-0"
+                >
+                  {isAnalyzing ? (
+                    <>
+                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                      解析中...
+                    </>
+                  ) : (
+                    "开始解析"
+                  )}
+                </Button>
+              </form>
+
+
+            </>
+          )}
         </div>
       </div>
 

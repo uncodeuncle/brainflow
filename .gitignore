@@ -39,3 +39,4 @@ tsconfig.json
 file_list.txt
 .gitignore
 src.rar
+worker/index.ts.bak

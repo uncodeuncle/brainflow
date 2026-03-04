@@ -1,0 +1,16 @@
+[dotenv@17.3.1] injecting env (10) from .env -- tip: 鈿欙笍  specify custom .env file path with { path: '/custom/path/.env' }
+RoleArn: acs:ram::1095014266725991:role/brainflowuploader
+AccessKey: LTAI5tH4qKGAC8aVgqydz479
+{
+  "RequestId": "DE4A6EEB-A330-5405-A3E2-F04E03018B68",
+  "AssumedRoleUser": {
+    "Arn": "acs:ram::1095014266725991:role/brainflowuploader/BrainflowUploader",
+    "AssumedRoleId": "300543923771296445:BrainflowUploader"
+  },
+  "Credentials": {
+    "SecurityToken": "CAISzgJ1q6Ft5B2yfSjIr5rdAP+FipdGjqWna0HoqVlsdOdvipbzujz2IHhMeXVrCOodsfs2nmFW6voflrhZUZZEQ0LAatRN9pBQ+A+sedJjWGQcTudW5qe+EE2/VjTZvqaLEcibIfrZfvCyESOm8gZ43br9cxi7QlWhKufnoJV7b9MRLGLaBHg8c7UwHAZ5r9IAPnb8LOukNgWQ4lDdF011oAFx+wgdgOadupTEu0eG1QGglLFK/dmgc8GeApMybMslYbCcx/drc6fN6ilU5iVR+b1+5K4+om+f443GUgMKvErfabuKroEyNnZzfKE7HaBAq+fhjfl/s+DejZR4b++m23TFOs62ZvdDoKOscIvBXr6yJWt9muJ2fPo7l4gnHnLFcPNq1fJwAa4FAFVeZ+KCRB/UJCFZNi5EjMnNhabntINy5f5fqzNMlUOw01rRK93xGoABmQKTQuEPhoUBR6+5ny47v068UoMsC7v2DqpcSdgwfel4EzT7UVPTTrEhkFTKbAlbzyge6oeATMXT931Jkb+XHyI5yp9XxxYzvs/+F+hEYxNP1n3NDwLaKqmYruWmChDd2acAPW+CK7Vc1gQWl22fGYZOQDBLRYHp3zisi4v6ZTMgAA==",
+    "AccessKeyId": "STS.NYhKE1gHg9gLigYMY9xhCeSXX",
+    "AccessKeySecret": "Evm4r7yG9FNFE9ouHuRcDEXavKG9E41t6khJjJY2rKiP",
+    "Expiration": "2026-03-04T09:31:20Z"
+  }
+}
