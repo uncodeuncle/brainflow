@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 import path from "path";
 
 const nextConfig: NextConfig = {
-  basePath: '/tools/brainflow',
+  basePath: process.env.NEXT_PUBLIC_BASE_PATH || '',
   outputFileTracingRoot: path.join(__dirname, './'),
   typescript: {
     ignoreBuildErrors: true,

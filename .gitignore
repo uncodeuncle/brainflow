@@ -35,3 +35,7 @@ test_sub.ts
 test_result2.txt
 test_result.txt
 manager.sh
+tsconfig.json
+file_list.txt
+.gitignore
+src.rar

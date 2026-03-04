@@ -1,12 +1,14 @@
 {
-  "name": "bilibrain",
+  "name": "brainflow",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start -p 3012",
-    "lint": "eslint"
+    "lint": "eslint",
+    "worker": "tsx worker/index.ts",
+    "setup:deps": "node setup-deps.js"
   },
   "dependencies": {
     "@alicloud/openapi-client": "^0.4.15",

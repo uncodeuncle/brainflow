@@ -11,6 +11,7 @@ import { InteractiveFlow } from './reader/InteractiveFlow';
 import { TextKnowledgeTree } from './reader/TextKnowledgeTree';
 import { InlineCopilot } from './reader/InlineCopilot';
 import { AIRawResult } from '@/types/brain';
+import { getBasePath } from "@/lib/utils";
 import {
     ResizableHandle,
     ResizablePanel,
@@ -45,7 +46,7 @@ export function Reader({ jobId, onBack, saveResults, initialResults, initialCopi
         const interval = setInterval(async () => {
             try {
                 // Prevent aggressive browser caching of the API polling
-                const res = await fetch(`/tools/brainflow/api/task?id=${realJobId}&t=${Date.now()}`, {
+                const res = await fetch(`${getBasePath()}/api/task?id=${realJobId}&t=${Date.now()}`, {
                     cache: 'no-store'
                 });
                 if (res.status === 404) {

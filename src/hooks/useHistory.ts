@@ -22,7 +22,7 @@ interface BiliBrainDB extends DBSchema {
     };
 }
 
-const DB_NAME = 'bilibrain';
+const DB_NAME = 'brainflow';
 const DB_VERSION = 1;
 const STORE_NAME = 'history';
 
@@ -41,27 +41,47 @@ async function getDB(): Promise<IDBPDatabase<BiliBrainDB>> {
     return dbInstance;
 }
 
-/** Migrate legacy localStorage data to IndexedDB (one-time) */
+/** Migrate legacy data to new Brainflow DB (one-time) */
 async function migrateLegacyData() {
     try {
-        const legacy = localStorage.getItem('bilibrain_history');
-        if (!legacy) return;
-
-        const items: HistoryItem[] = JSON.parse(legacy);
-        if (!Array.isArray(items) || items.length === 0) return;
-
-        const db = await getDB();
-        const tx = db.transaction(STORE_NAME, 'readwrite');
-        for (const item of items) {
-            await tx.store.put(item);
+        // 1. First try to migrate from old localStorage if any
+        const legacyLocal = localStorage.getItem('bilibrain_history');
+        if (legacyLocal) {
+            const items: HistoryItem[] = JSON.parse(legacyLocal);
+            if (Array.isArray(items) && items.length > 0) {
+                const db = await getDB();
+                const tx = db.transaction(STORE_NAME, 'readwrite');
+                for (const item of items) {
+                    await tx.store.put(item);
+                }
+                await tx.done;
+                localStorage.removeItem('bilibrain_history');
+                console.log(`[IndexedDB] 已从 localStorage 迁移 ${items.length} 条记录`);
+            }
         }
-        await tx.done;
 
-        // Remove legacy data after successful migration
-        localStorage.removeItem('bilibrain_history');
-        console.log(`[IndexedDB] 已迁移 ${items.length} 条 localStorage 历史记录`);
+        // 2. Then try to migrate from the old 'bilibrain' IndexedDB Database
+        try {
+            const oldDb = await openDB<BiliBrainDB>('bilibrain', 1);
+            if (oldDb.objectStoreNames.contains('history')) {
+                const oldItems = await oldDb.getAll('history');
+                if (oldItems.length > 0) {
+                    const currentDb = await getDB();
+                    const tx = currentDb.transaction(STORE_NAME, 'readwrite');
+                    for (const item of oldItems) {
+                        await tx.store.put(item);
+                    }
+                    await tx.done;
+                    console.log(`[IndexedDB] 已从旧版 'bilibrain' DB 迁移 ${oldItems.length} 条记录至 'brainflow' DB`);
+                    // Note: We don't delete the old DB just to be absolutely safe, it acts as a permanent backup.
+                }
+            }
+            oldDb.close();
+        } catch (oldDbErr) {
+            // It's totally fine if the old DB doesn't exist
+        }
     } catch (e) {
-        console.warn('[IndexedDB] Legacy migration failed, keeping localStorage data:', e);
+        console.warn('[IndexedDB] Legacy migration failed:', e);
     }
 }
 
@@ -189,13 +209,13 @@ export function useHistory() {
         try {
             const db = await getDB();
             let dataToExport: HistoryItem[] = [];
-            let exportFilename = `bilibrain_history_${new Date().toISOString().slice(0, 10)}.json`;
+            let exportFilename = `brainflow_history_${new Date().toISOString().slice(0, 10)}.json`;
 
             if (jobIdToExport) {
                 const item = await db.get(STORE_NAME, jobIdToExport);
                 if (item) {
                     dataToExport = [item];
-                    exportFilename = `bilibrain_history_${jobIdToExport.slice(0, 8)}_${new Date().toISOString().slice(0, 10)}.json`;
+                    exportFilename = `brainflow_history_${jobIdToExport.slice(0, 8)}_${new Date().toISOString().slice(0, 10)}.json`;
                 } else {
                     alert('未找到该笔记记录');
                     return;

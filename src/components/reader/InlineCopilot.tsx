@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Sparkles, X, Loader2, Clock, ChevronLeft } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { getBasePath } from "@/lib/utils";
 
 interface CopilotQuery {
     id: string;
@@ -97,7 +98,7 @@ export function InlineCopilot({ jobId, initialHistory, updateExternalHistory, ex
         setDrawerMode('current');
 
         try {
-            const response = await fetch('/tools/brainflow/api/copilot', {
+            const response = await fetch(`${getBasePath()}/api/copilot`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

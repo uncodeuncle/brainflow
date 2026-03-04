@@ -8,6 +8,7 @@ import { AnalyzeModal } from "@/components/AnalyzeModal";
 import { Reader } from "@/components/Reader";
 import { BiliQRLogin, hasValidBiliAuth, getBiliSessdata } from "@/components/BilibiliConnect";
 import { useHistory } from "@/hooks/useHistory";
+import { getBasePath } from "@/lib/utils";
 
 function isBilibiliUrl(url: string): boolean {
   return url.includes('bilibili.com') || url.includes('b23.tv');
@@ -62,7 +63,7 @@ export default function Home() {
   const doAnalyze = async () => {
     setIsAnalyzing(true);
     try {
-      const res = await fetch('/tools/brainflow/api/analyze', {
+      const res = await fetch(`${getBasePath()}/api/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url, sessdata: getBiliSessdata() }),
@@ -94,7 +95,7 @@ export default function Home() {
       // Pass sessdata from localStorage if available
       const sessdata = getBiliSessdata();
       const payload = { ...config, url, ...(sessdata ? { sessdata } : {}) };
-      const res = await fetch('/tools/brainflow/api/task', {
+      const res = await fetch(`${getBasePath()}/api/task`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -155,7 +156,7 @@ export default function Home() {
         <div className="text-center space-y-4">
           <div className="flex justify-center items-center gap-2 mb-4">
             <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase">POWERED BY</span>
-            <img src="/tools/brainflow/Unlogomini.png" alt="Logo" className="h-[18px] object-contain opacity-70 hover:opacity-100 transition-opacity" />
+            <img src={`${getBasePath()}/Unlogomini.png`} alt="Logo" className="h-[18px] object-contain opacity-70 hover:opacity-100 transition-opacity" />
           </div>
           <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight text-foreground drop-shadow-sm">
             BrainFlow / 脑流

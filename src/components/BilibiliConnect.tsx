@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { CheckCircle2, Loader2, QrCode, X, RefreshCw, Smartphone } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
+import { getBasePath } from "@/lib/utils";
 
 const STORAGE_KEY = "brainflow_bili_sessdata";
 const STORAGE_TS_KEY = "brainflow_bili_sessdata_ts";
@@ -45,7 +46,7 @@ export function BiliQRLogin({ isOpen, onClose, onSuccess }: BiliQRLoginProps) {
     const generateQRCode = async () => {
         setScanStatus("loading");
         try {
-            const res = await fetch('/tools/brainflow/api/bilibili-qrlogin', { method: 'POST' });
+            const res = await fetch(`${getBasePath()}/api/bilibili-qrlogin`, { method: 'POST' });
             const data = await res.json();
             if (data.qrUrl && data.qrcodeKey) {
                 setQrUrl(data.qrUrl);
@@ -63,7 +64,7 @@ export function BiliQRLogin({ isOpen, onClose, onSuccess }: BiliQRLoginProps) {
         if (pollTimer.current) clearInterval(pollTimer.current);
         pollTimer.current = setInterval(async () => {
             try {
-                const res = await fetch(`/tools/brainflow/api/bilibili-qrlogin?key=${key}`);
+                const res = await fetch(`${getBasePath()}/api/bilibili-qrlogin?key=${key}`);
                 const data = await res.json();
                 if (data.status === "success" && data.sessdata) {
                     setScanStatus("success");

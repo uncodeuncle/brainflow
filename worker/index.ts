@@ -46,8 +46,9 @@ function limitTextByteLength(str: string, byteLimit: number): string {
 
 // Configuration
 const connection = {
-    host: '127.0.0.1',
-    port: 6379,
+    host: process.env.REDIS_HOST || '127.0.0.1',
+    port: parseInt(process.env.REDIS_PORT || '6379', 10),
+    password: process.env.REDIS_PASSWORD || undefined,
 };
 
 // 5. 自动巡检并清理过期临时文件 (清理 1 小时前的文件，防止硬盘爆满)
@@ -337,8 +338,8 @@ const worker = new Worker('bili-extract', async (job: Job) => {
 
                         const cleanRegion = (process.env.ALIYUN_OSS_REGION || '').replace(/['"]/g, '').replace('.aliyuncs.com', '').trim();
                         const cleanBucket = (process.env.ALIYUN_OSS_BUCKET || '').replace(/['"]/g, '').trim().replace(/[^a-z0-9-]/g, '');
-                        const client = new OSS({ region: cleanRegion, accessKeyId: cleanKeyId, accessKeySecret: cleanKeySecret, bucket: cleanBucket });
-                        const ossObjectName = `bilibrain-audio/${Date.now()}_${audioResolvedFileName}`;
+                        const client = new OSS({ region: cleanRegion, accessKeyId: cleanKeyId, accessKeySecret: cleanKeySecret, bucket: cleanBucket, secure: true });
+                        const ossObjectName = `brainflow-audio/${Date.now()}_${audioResolvedFileName}`;
                         await client.put(ossObjectName, audioActualFilePath);
                         const signedUrl = client.signatureUrl(ossObjectName, { expires: 14400 });
                         resultObj.ossAudioUrl = signedUrl;
@@ -429,7 +430,7 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                                 // yt-dlp will automatically download best video+audio and merge them if ffmpeg is available
                                 const ytdlpVideoCmd = `"${ytdlpPath}" -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --merge-output-format mp4 --output "${mergedPath}" --no-check-certificates --user-agent "${genericUA}" "${cleanUrl}"`;
                                 await execAsync(ytdlpVideoCmd, { env });
-                                resultObj.videoUrl = `/tools/brainflow/downloads/${expectedBaseName}.mp4`;
+                                resultObj.videoUrl = `${process.env.NEXT_PUBLIC_BASE_PATH || ''}/downloads/${expectedBaseName}.mp4`;
                                 resultObj.localPath = mergedPath;
                                 console.log(`[P${item.index}] ✅ 通用视频下载+合并完成！`);
                             }
@@ -550,7 +551,8 @@ chapters: [{ nodes: [{ title: "打开设置" }, { title: "选择16:9" }, { title
                                 { role: "user", content: `【视频标题上下文】：${item.title}\n\n请严格基于以下转录文稿，进行极度克制、具有归纳性的结构萃取（原封不动抄写关键参数，但摒弃无用转折口语），并只输出合法的 JSON 格式：\n\n${fullText}` }
                             ],
                             model: "deepseek-chat",
-                            response_format: { type: "json_object" }
+                            response_format: { type: "json_object" },
+                            max_tokens: 8192
                         });
 
                         const rawContent = completion.choices[0].message.content || '{}';
@@ -903,7 +905,7 @@ chapters: [{ nodes: [{ title: "打开设置" }, { title: "选择16:9" }, { title
 
                     output.on('close', function () {
                         console.log(`一键打包压缩文件生成完成: ${zipPath} (${archive.pointer()} total bytes)`);
-                        playlistZipUrl = `/tools/brainflow/downloads/${zipFileName}`;
+                        playlistZipUrl = `${process.env.NEXT_PUBLIC_BASE_PATH || ''}/downloads/${zipFileName}`;
                         resolve();
                     });
 
