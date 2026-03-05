@@ -51,6 +51,92 @@ const connection = {
     password: process.env.REDIS_PASSWORD || undefined,
 };
 
+// ================================================
+// 📚 书籍智能识别与章节分拆工具集
+// ================================================
+
+interface ChapterHint { title: string; start_hint: string; }
+interface BookPreflightResult {
+    split_recommended: boolean;
+    doc_type: string;
+    split_reason: string;
+    chapters: ChapterHint[];
+}
+
+async function runBookPreflight(fullText: string, apiKey: string): Promise<BookPreflightResult> {
+    const FALLBACK: BookPreflightResult = { split_recommended: false, doc_type: '文章', split_reason: '默认不拆分', chapters: [] };
+    if (fullText.length < 8000) return FALLBACK;
+
+    const headerPatterns = [
+        /第[一二三四五六七八九十\d]+章[\s：:].{2,20}/g,
+        /Chapter\s+\d+[\s:].{2,40}/gi,
+        /^\d{1,2}\.\d?\s+[\u4e00-\u9fa5A-Za-z].{2,30}/gm,
+        /^[一二三四五六七八九十]、[\s：:].{2,20}/gm,
+        /^[一二三四五六七八九十][．.\.]\s+.{2,20}/gm,
+    ];
+    const detectedHeaders: string[] = [];
+    for (const pat of headerPatterns) {
+        const hits = fullText.match(pat) || [];
+        detectedHeaders.push(...hits.slice(0, 100)); // 放宽到 100 章，保证能覆盖全书
+    }
+    if (detectedHeaders.length < 2) return FALLBACK;
+
+    try {
+        const openai = new OpenAI({ baseURL: 'https://api.deepseek.com', apiKey });
+        const snippet = fullText.slice(0, 3000);
+        const prompt = `以下是一份文档的元信息：
+• 总字数：${fullText.length} 字
+• 正则初步扫描到的可能章节标题 (${detectedHeaders.length} 个):
+  ${detectedHeaders.join('\n  ')}
+• 文档开头部分：
+${snippet}
+
+请严格仅输出如下 JSON，不包含任何其他文字：
+{
+  "split_recommended": <按章节拆分解读比整体解读更有价值则为 true，否则 false>,
+  "doc_type": "<书籍|学术论文|技术报告|会议纪要|文章|其他>",
+  "split_reason": "<简短说明为什么值得或不值得拆分>",
+  "chapters": [
+    { "title": "<精简后的章节名，如:第一章 乱世浮萍>", "start_hint": "<直接原封不动抄写上面提供的对应的正则扫描标题，作为定位标志>" }
+  ]
+}
+注意：请对正则扫描到的标题进行清洗过滤，去掉明显不是标题的杂音，将真正的章节名填入 chapters。start_hint 必须是你认为对应的原本的标题字符串内容。`;
+        const resp = await openai.chat.completions.create({
+            model: 'deepseek-chat',
+            response_format: { type: 'json_object' },
+            max_tokens: 1024,
+            messages: [
+                { role: 'system', content: '你是一名文档类型分析专家。只输出指定的 JSON，禁止任何其他文字。' },
+                { role: 'user', content: prompt }
+            ]
+        });
+        const parsed = JSON.parse(resp.choices[0].message.content || '{}');
+        if (parsed.split_recommended && Array.isArray(parsed.chapters) && parsed.chapters.length >= 2) {
+            return parsed as BookPreflightResult;
+        }
+        return { ...FALLBACK, doc_type: parsed.doc_type || '文章', split_reason: parsed.split_reason || '' };
+    } catch {
+        return FALLBACK;
+    }
+}
+
+function splitTextByChapters(fullText: string, chapters: ChapterHint[]): { title: string; text: string }[] {
+    const positions: { title: string; pos: number }[] = [];
+    for (const ch of chapters) {
+        const hint = ch.start_hint?.trim();
+        if (!hint) continue;
+        const idx = fullText.indexOf(hint);
+        if (idx !== -1) positions.push({ title: ch.title, pos: idx });
+    }
+    if (positions.length < 2) return [{ title: chapters[0]?.title || '全文', text: fullText }];
+    positions.sort((a, b) => a.pos - b.pos);
+    return positions.map((p, i) => ({
+        title: p.title,
+        text: fullText.slice(p.pos, positions[i + 1]?.pos ?? fullText.length)
+    }));
+}
+
+
 // 5. 自动巡检并清理过期临时文件 (清理 1 小时前的文件，防止硬盘爆满)
 async function runStorageSanitation() {
     console.log("🧹 启动存储空间自动巡检...");
@@ -541,9 +627,76 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                     videoDownloadPromises.push(vp);
                 }
 
+                // ======== 📚 书籍章节智能拆分（仅对本地文档且字数足够时触发）========
+                let isBookExpanded = false;
+                const isDocumentType = ['local_text', 'local_document'].includes(transcriptionMethod);
+                if (isLocalTask && isDocumentType && fullText.length >= 8000) {
+                    const deepseekKey = (process.env.DEEPSEEK_API_KEY as string)?.replace(/['\"]/g, '').trim();
+                    if (deepseekKey) {
+                        console.log(`[P${item.index}] 📚 启动书籍识别探针 (${fullText.length} 字)...`);
+                        await safeUpdateProgress({ step: 'book_preflight', p: item.index, message: '正在智能识别文档结构...', percent: Math.round(baseProgress + stepProgress * 3.5), partialResults: results });
+
+                        const preflight = await runBookPreflight(fullText, deepseekKey);
+                        console.log(`[P${item.index}] 📚 探针结果: doc_type=${preflight.doc_type}, split=${preflight.split_recommended}, reason=${preflight.split_reason}`);
+
+                        if (preflight.split_recommended && preflight.chapters.length >= 2) {
+                            const openai = new OpenAI({ baseURL: 'https://api.deepseek.com', apiKey: deepseekKey });
+                            const chapterTexts = splitTextByChapters(fullText, preflight.chapters);
+                            console.log(`[P${item.index}] 📚 已切割为 ${chapterTexts.length} 个章节，开始逐章提取知识...`);
+                            isBookExpanded = true;
+
+                            // 把原始 resultObj 出栈（未 push 时不用弹，直接放弃）
+                            // 为每个章节独立生成结果
+                            for (let ci = 0; ci < chapterTexts.length; ci++) {
+                                const chap = chapterTexts[ci];
+                                // 用一个全局 index 偏移保证不与其他 items 冲突, 比如 item=1 时，章节 index 为 1001, 1002...
+                                const chapIndex = item.index * 1000 + ci + 1;
+                                const chapResult: any = {
+                                    id: `${item.id}_ch${ci}`,
+                                    index: chapIndex,
+                                    title: chap.title,
+                                    docType: preflight.doc_type,
+                                    transcriptionMethod: `book_chapter (${preflight.doc_type})`,
+                                    status: 'success',
+                                    error: null,
+                                };
+                                try {
+                                    await safeUpdateProgress({ step: 'ai_brain', p: chapIndex, message: `正在解析：${chap.title}`, percent: Math.round(baseProgress + stepProgress * 4 * ((ci + 1) / chapterTexts.length)), partialResults: results });
+                                    const systemPrompt = `你是一名极度理性的专属知识库架构师。\n核心任务是将书籍章节内容萃取为原子化、**树状层级**的知识卡片流 (Card Flow)。\n该章节来自《${item.title}》的"${chap.title}"部分。\n【格式要求】必须严格输出纯 JSON，禁止任何 Markdown 代码块包装，直接以 { 开始。\n{"chapters":[{"id":"chapter_01","title":"<高度归纳的本章核心议题>","nodes":[{"id":"card_01","title":"节点标题","type":"concept","content":"核心概述","detailedPoints":[{"point":"具体细节"}],"relations":[]}]}],"terms":[{"term":"专业词","brief":"解释"}]}`;
+                                    const completion = await openai.chat.completions.create({
+                                        messages: [
+                                            { role: 'system', content: systemPrompt },
+                                            { role: 'user', content: `【章节标题】：${chap.title}\n\n${chap.text}` }
+                                        ],
+                                        model: 'deepseek-chat',
+                                        response_format: { type: 'json_object' },
+                                        max_tokens: 8192
+                                    });
+                                    const rawContent = completion.choices[0].message.content || '{}';
+                                    chapResult.summary = rawContent;
+                                    const parsed = JSON.parse(rawContent);
+                                    chapResult.chapters = parsed.chapters || [];
+                                    chapResult.terms = parsed.terms || [];
+                                    console.log(`[P${item.index}→Ch${ci + 1}] ✅ 章节「${chap.title}」提取成功`);
+                                } catch (chapErr: any) {
+                                    chapResult.error = chapErr.message;
+                                    console.error(`[P${item.index}→Ch${ci + 1}] ❌ 章节提取失败: ${chapErr.message}`);
+                                }
+                                results.push(chapResult);
+                                results.sort((a, b) => a.index - b.index);
+                                await safeUpdateProgress({ step: 'ai_brain_done', p: chapIndex, message: `${chap.title} 提取完成`, percent: Math.round(baseProgress + stepProgress * 4 * ((ci + 1) / chapterTexts.length)), partialResults: results });
+                            }
+                        }
+                    }
+                }
+
                 // Phase 6: DeepSeek API Integration
                 // 字幕极短时跳过 AI 分析，避免 DeepSeek 返回空 chapters
-                if (fullText.length < 100 || fullText.startsWith('[此视频无')) {
+                if (isBookExpanded) {
+                    // 书籍已展开为多个章节结果，跳过单卡片分析
+                    console.log(`[P${item.index}] 📚 书籍拆分模式已完成，跳过单卡片流程`);
+                } else if (fullText.length < 100 || fullText.startsWith('[此视频无')) {
+
                     console.warn(`[P${item.index}] 字幕过短或无效 (${fullText.length}字), 跳过 AI 分析`);
                     resultObj.chapters = [{
                         id: 'chapter_short',
@@ -662,18 +815,18 @@ chapters: [{ nodes: [{ title: "打开设置" }, { title: "选择16:9" }, { title
                     }
                 } // ← 关闭 short-text else 分支
 
-
-                results.push(resultObj);
-
-                // 【关键修改：提前将局部结果通过 progress 传递给前台】
-                results.sort((a, b) => a.index - b.index); // 确保并发下局部结果依然有序
-                await safeUpdateProgress({
-                    step: 'ai_brain_done',
-                    p: item.index,
-                    message: `P${item.index} 知识萃取完成`,
-                    percent: Math.round(baseProgress + stepProgress * 4),
-                    partialResults: results // 将目前所有已解析成功的 P 传给前台以便提前渲染
-                });
+                if (!isBookExpanded) {
+                    results.push(resultObj);
+                    // 【关键修改：提前将局部结果通过 progress 传递给前台】
+                    results.sort((a, b) => a.index - b.index); // 确保并发下局部结果依然有序
+                    await safeUpdateProgress({
+                        step: 'ai_brain_done',
+                        p: item.index,
+                        message: `P${item.index} 知识萃取完成`,
+                        percent: Math.round(baseProgress + stepProgress * 4),
+                        partialResults: results // 将目前所有已解析成功的 P 传给前台以便提前渲染
+                    });
+                }
 
             } catch (err: any) {
                 console.error(`P${item.index} 处理失败:`, err);
@@ -709,6 +862,10 @@ chapters: [{ nodes: [{ title: "打开设置" }, { title: "选择16:9" }, { title
             const deepseekKey = (process.env.DEEPSEEK_API_KEY as string)?.replace(/['"]/g, '').trim();
             const openai = new OpenAI({ baseURL: 'https://api.deepseek.com', apiKey: deepseekKey });
 
+            const firstDocType = successResults[0]?.docType || '';
+            const isDocumentMR = firstDocType.includes('书籍') || firstDocType.includes('文章') || firstDocType.includes('文档') || firstDocType.includes('文本');
+            const contentType = isDocumentMR ? '长篇文档或书籍的章节集' : '系列视频';
+
             // ========== 第一步：轻量调用生成 title + overview ==========
             await safeUpdateProgress({ step: 'map_reduce', message: '正在生成合集概览...', percent: 88, partialResults: results });
             console.log('[Map-Reduce 1/4] 生成合集 title + overview...');
@@ -717,18 +874,18 @@ chapters: [{ nodes: [{ title: "打开设置" }, { title: "选择16:9" }, { title
             const skeletonInput = successResults.map(r => {
                 const chapterTitles = (r.chapters || []).map((ch: any) => ch.title).join(' / ');
                 const termNames = (r.terms || []).map((t: any) => t.term).join('、');
-                return `[第${r.index}集 ${r.title}]\n章节：${chapterTitles || '无'}\n术语：${termNames || '无'}`;
+                return `[第${r.index}部分 ${r.title}]\n章节：${chapterTitles || '无'}\n术语：${termNames || '无'}`;
             }).join('\n\n');
 
             const titleOverviewCompletion = await openai.chat.completions.create({
                 messages: [
                     {
-                        role: "system", content: `你是一名内容概括专家。请根据用户提供的系列视频骨架信息，输出纯 JSON（禁止 markdown），格式如下：
+                        role: "system", content: `你是一名内容概括专家。请根据用户提供的${contentType}骨架信息，输出纯 JSON（禁止 markdown），格式如下：
 {
   "title": "用一句话概括这个合集的核心主题（精炼、有概括力，不超过20字）",
   "overview": "用2-3句话简要概述整个合集的核心内容和精华，让读者快速了解这个系列讲了什么、主旨是什么。控制在80字以内。"
 }` },
-                    { role: "user", content: `以下是一个包含 ${successResults.length} 集的系列视频的结构概览：\n\n${skeletonInput}` }
+                    { role: "user", content: `以下是一个包含 ${successResults.length} 个部分的${contentType}结构概览：\n\n${skeletonInput}` }
                 ],
                 model: "deepseek-chat",
                 response_format: { type: "json_object" },
@@ -751,14 +908,14 @@ chapters: [{ nodes: [{ title: "打开设置" }, { title: "选择16:9" }, { title
             await safeUpdateProgress({ step: 'map_reduce', message: '正在规划跨集知识结构...', percent: 90, partialResults: results });
             console.log('[Map-Reduce 2/4] 结构规划：识别跨集主题骨架...');
 
-            const allSummaries = successResults.map(r => `[第${r.index}集 ${r.title}]\n` + JSON.stringify(r.chapters)).join('\n\n');
+            const allSummaries = successResults.map(r => `[第${r.index}部分 ${r.title}]\n` + JSON.stringify(r.chapters)).join('\n\n');
             const safeAllSummaries = limitTextByteLength(allSummaries, 60000);
 
             const planningCompletion = await openai.chat.completions.create({
                 messages: [
                     {
-                        role: "system", content: `你是一名宏观知识架构师。用户提供了一个多集系列的所有分集结构化数据。
-你的任务是：分析所有集的内容，识别出贯穿全集的 3-6 个宏观知识主题，并指出每个主题的内容主要来自哪几集。
+                        role: "system", content: `你是一名宏观知识架构师。用户提供了一个${contentType}的所有部分的结构化数据。
+你的任务是：分析所有部分的内容，识别出贯穿全集的 3-6 个宏观知识主题，并指出每个主题的内容主要来自哪几部分。
 
 【输出格式】纯 JSON，禁止 markdown：
 {
@@ -767,17 +924,17 @@ chapters: [{ nodes: [{ title: "打开设置" }, { title: "选择16:9" }, { title
       "id": "theme_01",
       "title": "宏观主题名称（高度归纳）",
       "description": "一句话说明这个主题涵盖什么",
-      "sources": [1, 3, 5]
+      "sources": [1001, 1003, 1005] // 注意：这里的来源归属必须是提供的文本中标明的实际数字，例如 1001, 2005 等，不要简写
     }
   ]
 }
 
 【铁律】
-1. 每个 P（集）必须至少被一个主题覆盖，不允许遗漏任何一集。
-2. 同一个 P 可以出现在多个主题中（如果它的内容横跨多个主题）。
-3. 主题划分要有逻辑层次感，不要只是把原来的集数重新编号。要真正做到"打碎重组"。
+1. 每一个部分必须至少被一个主题覆盖，不允许遗漏任何一个部分。
+2. 同一个部分可以出现在多个主题中（如果它的内容横跨多个主题）。
+3. 主题划分要有逻辑层次感，不要只是把原来的部分重新编号。要真正做到"打碎重组"。
 4. 只输出规划骨架，不要输出任何详细内容。` },
-                    { role: "user", content: `以下是 ${successResults.length} 集视频的完整结构化数据，请分析并输出跨集主题规划：\n\n${safeAllSummaries}` }
+                    { role: "user", content: `以下是 ${successResults.length} 个部分的完整结构化数据，请分析并输出跨集主题规划：\n\n${safeAllSummaries}` }
                 ],
                 model: "deepseek-chat",
                 response_format: { type: "json_object" },
@@ -822,6 +979,23 @@ chapters: [{ nodes: [{ title: "打开设置" }, { title: "选择16:9" }, { title
                     .map(r => `[第${r.index}集 ${r.title}]\n${JSON.stringify(r.chapters)}`)
                     .join('\n\n');
 
+                const firstDocType = successResults[0]?.docType || '';
+                const isDocument = firstDocType.includes('书籍') || firstDocType.includes('文章') || firstDocType.includes('文档') || firstDocType.includes('文本');
+
+                const timeStampFormatRule = isDocument ?
+                    `"timestamp": "来自 P1001, P1003",
+      "detailedPoints": [
+        { "point": "具体的技术细节、操作步骤或关键参数", "timestamp": "P1001" }
+      ],` :
+                    `"timestamp": "来自 P1, P3",
+      "detailedPoints": [
+        { "point": "具体的技术细节、操作步骤或关键参数", "timestamp": "P1 02:30" }
+      ],`;
+
+                const timeStampInstructionRule = isDocument ?
+                    `5. 去除伪时间戳：来源出处只写入 timestamp 字段（例如填入 "P1001" 或 "P1001, P1003"）。因为原始分集是一本书或文档，**绝对禁止**擅自编造出分秒时间戳（如 "05:15"），只保留来源集数即可。` :
+                    `5. 时间戳去重：来源集数和时间信息只写在 timestamp 字段中，禁止在 content 和 point 的正文里重复写时间戳（如"P13 00:30"），避免前端重复显示。`;
+
                 const themeCompletion = await openai.chat.completions.create({
                     messages: [
                         {
@@ -838,10 +1012,7 @@ chapters: [{ nodes: [{ title: "打开设置" }, { title: "选择16:9" }, { title
       "title": "融合后的知识节点标题",
       "type": "concept",
       "content": "该节点的核心内容概述，保留技术深度",
-      "timestamp": "来自 P1, P3",
-      "detailedPoints": [
-        { "point": "具体的技术细节、操作步骤或关键参数", "timestamp": "P1 02:30" }
-      ],
+      ${timeStampFormatRule}
       "relations": [
         { "targetId": "node_yy", "type": "leads_to", "label": "推导出" }
       ]
@@ -854,7 +1025,8 @@ chapters: [{ nodes: [{ title: "打开设置" }, { title: "选择16:9" }, { title
 2. 跨集关联：如果某个概念在多集中出现过，要在 content 或 detailedPoints 中标注来源集数，说明它们之间的联系和演进关系。
 3. 同类合并：同一个概念在不同集中的描述要合并到一起，而不是重复罗列。
 4. 保留技术深度：content 和 detailedPoints 要有实质内容，不能写空话套话。
-5. 时间戳去重：来源集数和时间信息只写在 timestamp 字段中，禁止在 content 和 point 的正文里重复写时间戳（如"P13 00:30"），避免前端重复显示。` },
+${timeStampInstructionRule}`
+                        },
                         { role: "user", content: `请将以下分集数据融合成「${theme.title}」主题的完整章节：\n\n${relevantData}` }
                     ],
                     model: "deepseek-chat",

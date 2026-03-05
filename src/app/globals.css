@@ -172,6 +172,16 @@
       box-shadow: 0 0 20px 5px var(--primary);
     }
   }
+
+  @keyframes marquee {
+    from {
+      transform: translateX(0);
+    }
+
+    to {
+      transform: translateX(-50%);
+    }
+  }
 }
 
 @layer base {

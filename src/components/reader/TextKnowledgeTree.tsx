@@ -17,6 +17,16 @@ export function TextKnowledgeTree({ globalTitle, chapters, terms }: TextKnowledg
         return <p className="text-muted-foreground text-center py-20">暂无结构化大纲数据...</p>;
     }
 
+    const formatTimestamp = (ts?: string) => {
+        if (!ts) return '';
+        // Convert P1001, P1002 etc. to "第1章", "第2章" for readability
+        return ts.replace(/P(\d{4,})/g, (match, p1) => {
+            const index = parseInt(p1, 10);
+            const chapterNum = index % 1000;
+            return `第${chapterNum}章`;
+        });
+    };
+
     const renderContentWithTerms = (text: string) => {
         if (!terms || terms.length === 0) return <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ p: 'span' }}>{text}</ReactMarkdown>;
 
@@ -61,7 +71,7 @@ export function TextKnowledgeTree({ globalTitle, chapters, terms }: TextKnowledg
                                     {node.title}
                                     {node.timestamp && (
                                         <span className="text-xs font-mono text-muted-foreground bg-gray-100 px-1.5 py-0.5 rounded ml-2">
-                                            {node.timestamp}
+                                            {formatTimestamp(node.timestamp)}
                                         </span>
                                     )}
                                 </h3>
@@ -81,7 +91,7 @@ export function TextKnowledgeTree({ globalTitle, chapters, terms }: TextKnowledg
                                                     {renderContentWithTerms(dp.point)}
                                                     {dp.timestamp && (
                                                         <span className="text-[11px] font-mono text-muted-foreground/60 ml-2 inline-block bg-gray-50 px-1 rounded border border-border/50">
-                                                            [{dp.timestamp}]
+                                                            [{formatTimestamp(dp.timestamp)}]
                                                         </span>
                                                     )}
                                                 </div>

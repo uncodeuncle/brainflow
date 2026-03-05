@@ -11,6 +11,9 @@ import { useHistory } from "@/hooks/useHistory";
 import { getBasePath } from "@/lib/utils";
 
 import { LocalUploader } from "@/components/LocalUploader";
+import { BroadcastMarquee } from "@/components/BroadcastMarquee";
+import { HistoryCard } from "@/components/HistoryCard";
+import { HistoryArchiveModal } from "@/components/HistoryArchiveModal";
 
 function isBilibiliUrl(url: string): boolean {
   return url.includes('bilibili.com') || url.includes('b23.tv');
@@ -26,6 +29,7 @@ export default function Home() {
 
   // Toggles the Local Uploader UI
   const [showLocalUploader, setShowLocalUploader] = useState(false);
+  const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
 
   const { history, isLoaded, addHistory, removeHistory, updateHistoryTitle, saveResults, exportHistory, importHistory, clearHistory, updateCopilotHistory } = useHistory();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -186,6 +190,11 @@ export default function Home() {
         </Button>
       </div>
 
+      {/* Fixed Top-Right Broadcast Marquee */}
+      <div className="fixed top-4 right-4 z-50 max-w-sm flex justify-end">
+        <BroadcastMarquee />
+      </div>
+
       <div className={`z-10 w-full max-w-3xl flex flex-col items-center space-y-10 shrink-0 transition-transform duration-700 ${!isLoaded ? 'opacity-0' : 'opacity-100'} animate-in fade-in zoom-in-95`}>
         {/* Header */}
         <div className="text-center space-y-4">
@@ -197,7 +206,7 @@ export default function Home() {
             BrainFlow / 脑流
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto font-normal leading-relaxed">
-            把网络视频、本地音视频与冗长文档即刻脱水，将知识点榨成脑流。
+            把合集视频/音视与冗长文档即刻脱水，将知识点榨成脑流。
           </p>
         </div>
 
@@ -268,6 +277,9 @@ export default function Home() {
               过往笔记
             </h2>
             <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setIsArchiveModalOpen(true)} className="h-8 rounded-full bg-primary/5 hover:bg-primary/10 text-primary font-medium text-xs">
+                更多记录 ({history.length})
+              </Button>
               <Button variant="ghost" size="sm" onClick={() => { if (confirm('确定要清空所有本地记录吗？')) clearHistory() }} className="h-8 rounded-full hover:bg-slate-100 text-slate-500 text-xs">
                 清空记录
               </Button>
@@ -282,74 +294,20 @@ export default function Home() {
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {history.map((item) => (
-              <div key={item.jobId} className="group relative flex items-center gap-3 p-3 rounded-2xl border border-border bg-white hover:border-primary/50 shadow-sm hover:shadow-md transition-all cursor-pointer">
-                <div className="relative w-20 h-14 rounded-lg overflow-hidden bg-slate-50 shrink-0 border border-border/50" onClick={() => setActiveJobId(item.jobId)}>
-                  {item.thumbnail ? (
-                    <img src={item.thumbnail} alt="cover" className="object-cover w-full h-full transform group-hover:scale-105 transition duration-500" />
-                  ) : (
-                    <div className="flex items-center justify-center w-full h-full bg-gradient-to-br from-slate-100 to-slate-200">
-                      <MonitorPlay className="w-6 h-6 text-slate-400 opacity-60" />
-                    </div>
-                  )}
-                  <div className="absolute inset-0 bg-black/5 group-hover:bg-transparent transition-colors"></div>
-                </div>
-
-                <div className="flex-1 min-w-0 py-0.5" onClick={() => { if (editingId !== item.jobId) setActiveJobId(item.jobId); }}>
-                  {editingId === item.jobId ? (
-                    <div className="flex items-center gap-1 w-full" onClick={e => e.stopPropagation()}>
-                      <Input
-                        value={editingTitle}
-                        onChange={e => setEditingTitle(e.target.value)}
-                        className="h-7 text-xs px-2 py-0 focus-visible:ring-1 focus-visible:ring-primary bg-slate-50 border-input flex-1"
-                        autoFocus
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') handleSaveEdit(e as any, item.jobId);
-                          if (e.key === 'Escape') handleCancelEdit(e as any);
-                        }}
-                      />
-                      <Button variant="ghost" size="icon" onClick={(e) => handleSaveEdit(e, item.jobId)} className="w-6 h-6 hover:bg-green-100 text-green-600 rounded">
-                        <Check className="w-3.5 h-3.5" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={handleCancelEdit} className="w-6 h-6 hover:bg-slate-200 text-slate-500 rounded">
-                        <X className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="flex items-start justify-between gap-2 group/title">
-                      <h3 className="text-[13px] font-bold text-slate-800 line-clamp-2 group-hover:text-primary transition-colors leading-snug">
-                        {item.title || `未命名笔记 (ID: ${item.jobId.slice(0, 6)})`}
-                      </h3>
-                      <button
-                        onClick={(e) => handleStartEdit(e, item.jobId, item.title)}
-                        className="opacity-0 group-hover/title:opacity-100 p-1 hover:bg-primary/10 rounded text-muted-foreground hover:text-primary transition-all shrink-0 mt-0.5"
-                        title="重命名"
-                      >
-                        <Edit2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                  )}
-
-                  <div className="flex items-center gap-2 mt-1.5 text-[11px] text-slate-500 font-medium">
-                    <span className="flex items-center bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 truncate max-w-[120px]">
-                      👤 {item.uploader || '未知来源'}
-                    </span>
-                    <span className="text-slate-300">•</span>
-                    <span className="flex items-center">
-                      🕒 {new Date(item.timestamp).toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-1 items-end self-start">
-                  <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); exportHistory(item.jobId); }} className="w-7 h-7 rounded-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blue-50 text-slate-300 hover:text-blue-500 shrink-0" title="导出此笔记">
-                    <Download className="w-3.5 h-3.5" />
-                  </Button>
-                  <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); removeHistory(item.jobId); }} className="w-7 h-7 rounded-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 text-slate-300 hover:text-red-500 shrink-0" title="删除">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
-              </div>
+            {history.slice(0, 6).map((item) => (
+              <HistoryCard
+                key={item.jobId}
+                item={item}
+                editingId={editingId}
+                editingTitle={editingTitle}
+                setEditingTitle={setEditingTitle}
+                onStartEdit={handleStartEdit}
+                onSaveEdit={handleSaveEdit}
+                onCancelEdit={handleCancelEdit}
+                onClickCard={setActiveJobId}
+                onExport={exportHistory}
+                onDelete={removeHistory}
+              />
             ))}
           </div>
         </div>
@@ -362,11 +320,25 @@ export default function Home() {
         onConfirm={handleStartTask}
       />
 
-      {/* Invisible QR Login Modal - only appears when needed */}
       <BiliQRLogin
         isOpen={showQRLogin}
         onClose={() => setShowQRLogin(false)}
         onSuccess={handleQRSuccess}
+      />
+
+      <HistoryArchiveModal
+        isOpen={isArchiveModalOpen}
+        onOpenChange={setIsArchiveModalOpen}
+        history={history}
+        editingId={editingId}
+        editingTitle={editingTitle}
+        setEditingTitle={setEditingTitle}
+        onStartEdit={handleStartEdit}
+        onSaveEdit={handleSaveEdit}
+        onCancelEdit={handleCancelEdit}
+        onClickCard={setActiveJobId}
+        onExport={exportHistory}
+        onDelete={removeHistory}
       />
     </main>
   );

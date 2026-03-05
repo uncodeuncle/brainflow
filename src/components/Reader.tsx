@@ -94,18 +94,27 @@ export function Reader({ jobId, onBack, saveResults, initialResults, initialCopi
     // Merged results: use final results if complete, otherwise use streamed partial results from progress
     const activeResults = isComplete ? (status?.result?.results || []) : (status?.progress?.partialResults || []);
 
-    // items requested initially
+    // Default to the original items requested by the user
     let requestedItems = status?.originalData?.items || [];
-    if (!requestedItems || requestedItems.length === 0) {
-        if (activeResults && activeResults.length > 0) {
-            requestedItems = activeResults.map((r: any) => ({
-                index: r.index,
-                title: r.title || `P${r.index}`
-            }));
-        }
-    }
 
-    const expectP0 = requestedItems.length > 1;
+    // Compute effective display items to support dynamically spawned book chapters (index >= 1000)
+    let displayItemsMap = new Map();
+    requestedItems.forEach((item: any) => {
+        if (item.index !== 0) displayItemsMap.set(item.index, item);
+    });
+    // Add dynamic chapters and remove their original parent placeholder
+    if (activeResults && activeResults.length > 0) {
+        activeResults.forEach((r: any) => {
+            if (r.index >= 1000) {
+                const parentIndex = Math.floor(r.index / 1000);
+                displayItemsMap.delete(parentIndex);
+                displayItemsMap.set(r.index, { index: r.index, title: r.title });
+            }
+        });
+    }
+    const displayItemsArray = Array.from(displayItemsMap.values()).sort((a, b) => a.index - b.index);
+
+    const expectP0 = displayItemsArray.length > 1;
     const p0Result = activeResults.find((r: any) => r.index === 0);
 
     let currentResult = activeResults.find((r: any) => r.index === activeIndex);
@@ -190,7 +199,7 @@ export function Reader({ jobId, onBack, saveResults, initialResults, initialCopi
                         </div>
 
                         <ScrollArea className="flex-1 p-4 overflow-y-auto bg-gray-50/50">
-                            {requestedItems.filter((item: any) => item.index !== 0).map((item: any) => {
+                            {displayItemsArray.map((item: any) => {
                                 const res = activeResults.find((r: any) => r.index === item.index);
                                 const isReady = !!res;
                                 const isTargetActive = resolvedActiveIndex === item.index;
@@ -204,7 +213,8 @@ export function Reader({ jobId, onBack, saveResults, initialResults, initialCopi
                                     >
                                         <div className={`flex border-l-[3px] pl-3 py-1 mb-2 group transition-colors justify-between items-center ${isTargetActive ? 'border-primary' : (isReady ? 'border-border group-hover:border-primary/50' : 'border-gray-200')}`}>
                                             <h3 className={`text-sm font-bold transition-colors line-clamp-2 ${isTargetActive ? 'text-primary' : (isReady ? 'text-foreground group-hover:text-primary' : 'text-muted-foreground')}`}>
-                                                P{item.index}: {(() => {
+                                                {item.index >= 1000 ? '' : `P${item.index}: `}
+                                                {(() => {
                                                     const pMatch = (res?.title || item.title)?.match(/\bp\d+\s+(.+)$/i);
                                                     return pMatch ? pMatch[1] : (res?.title || item.title);
                                                 })()}
@@ -267,8 +277,10 @@ export function Reader({ jobId, onBack, saveResults, initialResults, initialCopi
                         {expectP0 && (
                             <div className="p-4 border-t border-border bg-white shrink-0 shadow-[0_-5px_20px_rgba(0,0,0,0.02)]">
                                 <h2 className="text-xs font-bold text-muted-foreground mb-3 px-1 uppercase tracking-wider flex items-center gap-1">
-                                    <span>★</span> 全集融合归纳
-                                    <span className="font-normal text-muted-foreground/60 ml-1 normal-case tracking-normal">— 整合合集全部内容</span>
+                                    <span>★</span> {displayItemsArray.some(item => item.index >= 1000) ? '全书精华提炼' : '全集融合归纳'}
+                                    <span className="font-normal text-muted-foreground/60 ml-1 normal-case tracking-normal">
+                                        — {displayItemsArray.some(item => item.index >= 1000) ? '整合全书核心观点' : '整合合集全部内容'}
+                                    </span>
                                 </h2>
                                 <div
                                     onClick={() => p0Result && setActiveIndex(0)}
@@ -278,7 +290,7 @@ export function Reader({ jobId, onBack, saveResults, initialResults, initialCopi
                                 >
                                     <div className={`flex border-l-[3px] pl-3 py-1 mb-2 transition-colors justify-between items-center ${resolvedActiveIndex === 0 ? 'border-primary' : (p0Result ? 'border-primary/30' : 'border-gray-200')}`}>
                                         <h3 className={`text-sm font-bold transition-colors line-clamp-1 ${resolvedActiveIndex === 0 ? 'text-primary' : (p0Result ? 'text-foreground' : 'text-muted-foreground')}`}>
-                                            {p0Result?.title || '全集总览'}
+                                            {p0Result?.title || (displayItemsArray.some(item => item.index >= 1000) ? '全书总览' : '全集总览')}
                                         </h3>
                                     </div>
                                     {p0Result ? (
