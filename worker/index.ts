@@ -20,18 +20,6 @@ import Core from '@alicloud/pop-core';
 
 const execAsync = util.promisify(exec);
 
-/**
- * 创建阿里云 NLS 录音文件识别客户端
- */
-function createNlsClient(accessKeyId: string, accessKeySecret: string) {
-    return new Core({
-        accessKeyId,
-        accessKeySecret,
-        endpoint: 'https://filetrans.cn-shanghai.aliyuncs.com',
-        apiVersion: '2018-08-17'
-    });
-}
-
 // Token truncation protection (inspired by BibiGPT limitTranscriptByteLength)
 function limitTextByteLength(str: string, byteLimit: number): string {
     const byteLen = Buffer.from(str, 'utf-8').length;
@@ -452,10 +440,10 @@ const worker = new Worker('bili-extract', async (job: Job) => {
 
                 } // ← end of !isLocalTask block
 
-                // --------------- 优先级三：兜底 - 下载音频 + 阿里云 NLS 转录 (有成本) ---------------
+                // --------------- 优先级三：兜底 - 下载音频 + DashScope Paraformer 转录 (按量计费) ---------------
                 if (!fullText || fullText.length < 50) {
-                    console.log(`[P${item.index}] ⚠️ 字幕均不可用，降级到阿里云 NLS 语音转文字 (会消耗配额)...`);
-                    await safeUpdateProgress({ step: 'download', p: item.index, message: '启动语义识别...', percent: Math.round(baseProgress + stepProgress * 2), partialResults: results });
+                    console.log(`[P${item.index}] ⚠️ 字幕均不可用，降级到 DashScope Paraformer 极速语音大模型识别...`);
+                    await safeUpdateProgress({ step: 'download', p: item.index, message: '启动 Paraformer 大模型听写...', percent: Math.round(baseProgress + stepProgress * 2), partialResults: results });
 
                     // Audio extraction via 原生 API (bypasses yt-dlp 412)
                     // 带宽密集段：下载 + FFmpeg + OSS 上传 → 完成后释放 media slot
@@ -467,9 +455,9 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                     try {
                         if (isLocalTask) {
                             rawAudioFilePath = localRawFilePath;
-                            console.log(`[P${item.index}] 🔊 本地音频/视频文件已就绪，准备进入语音识别管道...`);
+                            console.log(`[P${item.index}] 🔊 本地音频/视频文件已就绪，准备进入 Paraformer 语音识别管道...`);
                         } else if (realBvid) {
-                            console.log(`[P${item.index}] 🔊 通过原生 API 下载音频用于语音转文字 (B站高速通道)...`);
+                            console.log(`[P${item.index}] 🔊 通过原生 API 下载音频用于 Paraformer 语音识别 (B站高速通道)...`);
                             const audioTargetUrl = `https://www.bilibili.com/video/${realBvid}/`;
                             const audioMediaResult = await fetchBilibiliMedia(
                                 audioTargetUrl, realPage, sessdata ? decodeURIComponent(sessdata) : undefined,
@@ -506,52 +494,93 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                         const signedUrl = client.signatureUrl(ossObjectName, { expires: 14400 });
                         resultObj.ossAudioUrl = signedUrl;
                     } finally {
-                        mediaSemaphore.release(); // ⚠️ 上传完就释放 slot，NLS 轮询不占带宽
+                        mediaSemaphore.release(); // ⚠️ 上传完就释放 slot，Paraformer 轮询不占带宽
                     }
 
                     // 以下是纯 API 轮询，不占 media slot
 
-                    // NLS Transcription
-                    console.log('正在提交阿里云 NLS 录音文件识别任务...');
-                    await safeUpdateProgress({ step: 'transcribe', p: item.index, message: '正在转录音频...', percent: Math.round(baseProgress + stepProgress * 3), partialResults: results });
+                    // DashScope Paraformer Transcription
+                    // See API Docs: https://help.aliyun.com/zh/model-studio/developer-reference/record-file-recognition
+                    console.log('正在提交阿里云 DashScope (Paraformer) 录音文件识别任务...');
+                    await safeUpdateProgress({ step: 'transcribe', p: item.index, message: '大模型极速转录中...', percent: Math.round(baseProgress + stepProgress * 3), partialResults: results });
 
-                    const nlsClient = createNlsClient(cleanKeyId, cleanKeySecret);
-                    const taskParams = { appkey: cleanAppKey, file_link: resultObj.ossAudioUrl, version: '4.0', enable_words: false };
-                    const submitResponse: any = await nlsClient.request('SubmitTask', { Task: JSON.stringify(taskParams) }, { method: 'POST' });
-                    const taskId = submitResponse.TaskId;
-                    if (!taskId) {
-                        // Graceful degradation: detect quota exhaustion instead of crashing
-                        const statusText = submitResponse.StatusText || '';
-                        if (statusText.includes('QUOTA_EXCEED') || submitResponse.StatusCode === 41050001) {
-                            console.error(`[P${item.index}] ❌ 阿里云 NLS 配额已耗尽: ${statusText}`);
-                            fullText = `[此视频无法提取文字] 原因：该视频没有平台字幕，需要语音转文字服务，但阿里云 NLS 配额已用完。请登录阿里云控制台充值语音识别配额，或选择有字幕的视频进行分析。`;
-                            transcriptionMethod = 'quota_exceeded';
+                    const dashscopeKey = (process.env.DASHSCOPE_API_KEY as string)?.replace(/['"]/g, '').trim();
+
+                    if (!dashscopeKey) {
+                        console.error(`[P${item.index}] ❌ 缺少 DASHSCOPE_API_KEY 环境变量`);
+                        fullText = `[此视频无法提取文字] 缺少 DASHSCOPE_API_KEY 配置。请在 .env 中填写阿里云百炼 API Key。`;
+                        transcriptionMethod = 'missing_dashscope_key';
+                    } else {
+                        // 1. Submit async transcription task
+                        const submitRes = await fetch('https://dashscope.aliyuncs.com/api/v1/services/audio/asr/transcription', {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${dashscopeKey}`,
+                                'Content-Type': 'application/json',
+                                'X-DashScope-Async': 'enable' // Must be async for file URLs
+                            },
+                            body: JSON.stringify({
+                                model: 'paraformer-8k-v2', // Best general model for video audio, handles mixed languages
+                                parameters: {},
+                                input: {
+                                    file_urls: [resultObj.ossAudioUrl]
+                                }
+                            })
+                        });
+
+                        const submitData = await submitRes.json();
+                        const taskId = submitData.output?.task_id;
+
+                        if (!submitRes.ok || !taskId) {
+                            console.error(`[P${item.index}] ❌ DashScope 任务提交失败: ${JSON.stringify(submitData)}`);
+                            fullText = `[提取文字失败] 语音大模型拒绝了请求：${submitData.message || '未知异常'}。`;
+                            transcriptionMethod = 'dashscope_submit_failed';
                         } else {
-                            throw new Error(`NLS 任务提交失败: ${JSON.stringify(submitResponse)}`);
-                        }
-                    }
+                            // 2. Poll for results
+                            let transcriptionResult: any = null;
+                            let pollCount = 0;
+                            while (pollCount < 60) {
+                                await new Promise(r => setTimeout(r, 5000)); // Poll every 5s
+                                pollCount++;
 
-                    if (taskId) {
-                        let transcriptionResult: any = null;
-                        let pollCount = 0;
-                        while (pollCount < 60) {
-                            await new Promise(r => setTimeout(r, 10000));
-                            pollCount++;
-                            const taskInfo: any = await nlsClient.request('GetTaskResult', { TaskId: taskId }, { method: 'GET' });
-                            if (taskInfo.StatusText === 'SUCCESS') { transcriptionResult = taskInfo.Result; break; }
-                            else if (taskInfo.StatusText === 'SUCCESS_WITH_NO_VALID_FRAGMENT') {
-                                console.warn(`[P${item.index}] ⚠️ NLS 返回 SUCCESS_WITH_NO_VALID_FRAGMENT（音频无有效语音，可能是纯音乐/BGM）`);
-                                fullText = `[此视频无有效语音] 音频中未检测到可识别的语音片段（可能是纯音乐/BGM），无法生成文字转录。`;
-                                transcriptionMethod = 'nls_no_speech';
-                                break;
+                                const statusRes = await fetch(`https://dashscope.aliyuncs.com/api/v1/tasks/${taskId}`, {
+                                    method: 'GET',
+                                    headers: { 'Authorization': `Bearer ${dashscopeKey}` }
+                                });
+                                const statusData = await statusRes.json();
+
+                                if (statusData.output?.task_status === 'SUCCEEDED') {
+                                    transcriptionResult = statusData.output.results?.[0];
+                                    break;
+                                } else if (statusData.output?.task_status === 'FAILED') {
+                                    throw new Error(`DashScope 转录失败: ${JSON.stringify(statusData)}`);
+                                } else if (statusData.output?.task_status === 'CANCELED') {
+                                    throw new Error("DashScope 任务被意外取消");
+                                }
+
+                                await safeUpdateProgress({ step: 'transcribe', p: item.index, message: `模型分析中 (排队/处理中)...`, percent: Math.round(baseProgress + stepProgress * 3), partialResults: results });
                             }
-                            else if (taskInfo.StatusText === 'FAILED') throw new Error(`NLS 转录失败: ${JSON.stringify(taskInfo)}`);
-                            await safeUpdateProgress({ step: 'transcribe', p: item.index, message: `转录中: ${taskInfo.StatusText}...`, percent: Math.round(baseProgress + stepProgress * 3), partialResults: results });
-                        }
-                        if (!transcriptionResult && transcriptionMethod !== 'nls_no_speech') throw new Error("NLS 转录超时");
-                        if (transcriptionResult) {
-                            fullText = transcriptionResult.Sentences?.map((s: any) => s.Text).join(' ') || "转录结果为空";
-                            transcriptionMethod = 'aliyun_nls';
+
+                            if (!transcriptionResult) throw new Error("DashScope 大模型转录超时");
+
+                            if (transcriptionResult) {
+                                // Paraformer returns a URL containing the actual transcript JSON
+                                const transUrl = transcriptionResult.transcription_url;
+                                if (transUrl) {
+                                    try {
+                                        const transRes = await fetch(transUrl);
+                                        const transData = await transRes.json();
+                                        const transcripts = transData.transcripts || [];
+                                        fullText = transcripts.map((t: any) => t.text || "").join(' ') || "转录结果为空";
+                                    } catch (e) {
+                                        console.error(`[P${item.index}] 提取实际转录结果失败:`, e);
+                                        fullText = "转录结果文件下载失败";
+                                    }
+                                } else {
+                                    fullText = "转录结果无效或 URL 为空";
+                                }
+                                transcriptionMethod = 'paraformer_v2';
+                            }
                         }
                     }
                 }

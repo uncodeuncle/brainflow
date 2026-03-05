@@ -37,8 +37,7 @@ export function BroadcastMarquee() {
             <Bell className="w-4 h-4 text-primary shrink-0 animate-pulse" />
             <div className="flex-1 overflow-hidden flex items-center h-5 relative">
                 <div
-                    className="flex whitespace-nowrap w-max items-center text-[13px] font-medium text-primary cursor-default hover:[animation-play-state:paused]"
-                    style={{ animation: 'marquee 25s linear infinite' }}
+                    className="flex whitespace-nowrap w-max items-center text-[13px] font-medium text-primary cursor-default hover:[animation-play-state:paused] animate-marquee"
                 >
                     {messages.map((m) => (
                         <span key={m.id} className="mx-4">
