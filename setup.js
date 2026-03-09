@@ -37,13 +37,13 @@ async function runSetup() {
         const deepseekKey = await askQuestion('DeepSeek API Key (用于 AI 总结): ');
         const aliyunKeyId = await askQuestion('阿里云 AccessKey ID (用于阿里听悟语音转文字): ');
         const aliyunKeySecret = await askQuestion('阿里云 AccessKey Secret: ');
-        const tingwuAppKey = await askQuestion('阿里云 听悟 AppKey: ');
+        const dashscopeKey = await askQuestion('阿里云百炼 DashScope API Key (用于 Paraformer 语音极速转写): ');
 
         envContent = `NEXT_PUBLIC_BASE_PATH=${basePath || ''}
 DEEPSEEK_API_KEY=${deepseekKey || ''}
 ALIYUN_ACCESS_KEY_ID=${aliyunKeyId || ''}
 ALIYUN_ACCESS_KEY_SECRET=${aliyunKeySecret || ''}
-TINGWU_APP_KEY=${tingwuAppKey || ''}
+DASHSCOPE_API_KEY=${dashscopeKey || ''}
 
 # 高级选项：B站扫码备用登录 SESSDATA
 BILIBILI_SESSION_TOKEN=

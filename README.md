@@ -75,7 +75,7 @@ BrainFlow 使用 BullMQ 管理后台的视频/音频提取任务队列，因此*
 | `ALIYUN_STS_ROLE_ARN` | 用于前端 OSS 直传的 RAM 角色 ARN，格式：`acs:ram::主账号UID:role/角色名` |
 | `ALIYUN_OSS_BUCKET` | 用于接收本地文件直传的 OSS Bucket 名称 |
 | `ALIYUN_OSS_REGION` | OSS 所在可用区 (例如 `oss-cn-shenzhen`) |
-| `TINGWU_APP_KEY` | 阿里云「通义听悟」接口的专属 APP KEY，用于语音识别 |
+| `DASHSCOPE_API_KEY` | 阿里云百炼专属 API KEY，用于调用 Paraformer 大模型进行语音极速转文字 |
 | `BILIBILI_SESSION_TOKEN` | (选填) B站 SESSDATA，填入后可跳过前端扫码环节 |
 
 ### 💡 阿里云 OSS 直传配置指引 (本地文件功能)
