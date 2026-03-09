@@ -1,5 +1,4 @@
 <div align="center">
-  <img src="public/favicon.ico" alt="BrainFlow Logo" width="120" />
   <h1>BrainFlow (脑流阅读器)</h1>
   <p>将视频、本地音视频与冗长文档即刻脱水，将知识点榨成脑流。</p>
 </div>
