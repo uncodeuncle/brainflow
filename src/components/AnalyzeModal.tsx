@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Check, FileText, Presentation, GitBranch, GitMerge, Download, PlayCircle, Loader2 } from "lucide-react";
+import { Check, FileText, Presentation, GitBranch, GitMerge, Download, PlayCircle, Loader2, GripVertical } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -15,12 +15,45 @@ export function AnalyzeModal({ isOpen, onOpenChange, data, onConfirm }: any) {
         downloadVideo: false,
     });
     const [selectedItems, setSelectedItems] = useState<number[]>([]);
+    const [displayEntries, setDisplayEntries] = useState<any[]>([]);
+    const [draggingId, setDraggingId] = useState<string | null>(null);
 
     useEffect(() => {
         if (data && data.entries) {
             setSelectedItems(data.entries.map((e: any) => e.index));
+            setDisplayEntries(data.entries);
         }
     }, [data]);
+
+    const handleDragStart = (e: React.DragEvent, id: string) => {
+        setDraggingId(id);
+        e.dataTransfer.effectAllowed = "move";
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+    };
+
+    const handleDrop = (e: React.DragEvent, targetId: string) => {
+        e.preventDefault();
+        if (!draggingId || draggingId === targetId) {
+            setDraggingId(null);
+            return;
+        }
+
+        setDisplayEntries(prev => {
+            const oldIndex = prev.findIndex(item => item.index.toString() === draggingId);
+            const newIndex = prev.findIndex(item => item.index.toString() === targetId);
+            if (oldIndex === -1 || newIndex === -1) return prev;
+
+            const newEntries = [...prev];
+            const [movedItem] = newEntries.splice(oldIndex, 1);
+            newEntries.splice(newIndex, 0, movedItem);
+            return newEntries;
+        });
+        setDraggingId(null);
+    };
 
     const toggleItem = (index: number) => {
         setSelectedItems(prev =>
@@ -31,9 +64,14 @@ export function AnalyzeModal({ isOpen, onOpenChange, data, onConfirm }: any) {
     if (!data) return null;
 
     const handleStart = () => {
+        // Filter out unchecked items but preserve the dragged display order
+        const orderedSelectedEntries = displayEntries.filter(e => selectedItems.includes(e.index));
+        // Crucial: Remap the logical 'index' to respect the new physical order (1, 2, 3...)
+        const remappedItems = orderedSelectedEntries.map((e, idx) => ({ ...e, index: idx + 1 }));
+
         onConfirm({
             formats: selectedFormat,
-            items: data.entries.filter((e: any) => selectedItems.includes(e.index)),
+            items: remappedItems,
             rawData: data
         });
         onOpenChange(false);
@@ -96,24 +134,36 @@ export function AnalyzeModal({ isOpen, onOpenChange, data, onConfirm }: any) {
                                 </div>
                             </div>
                             <div className="flex-1 overflow-y-auto pr-2 pb-4 space-y-2 mt-2 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 transition-all">
-                                {data.entries?.map((item: any) => (
+                                {displayEntries.map((item: any, mapIndex: number) => (
                                     <div
                                         key={item.index}
                                         onClick={() => toggleItem(item.index)}
+                                        draggable="true"
+                                        onDragStart={(e) => handleDragStart(e, item.index.toString())}
+                                        onDragOver={handleDragOver}
+                                        onDrop={(e) => handleDrop(e, item.index.toString())}
+                                        onDragEnd={() => setDraggingId(null)}
                                         className={cn(
                                             "flex items-center p-3 rounded-xl border cursor-pointer transition-all shadow-sm",
                                             selectedItems.includes(item.index)
                                                 ? "border-primary bg-primary/5"
-                                                : "border-border bg-white hover:border-primary/50"
+                                                : "border-border bg-white hover:border-primary/50",
+                                            draggingId === item.index.toString() ? 'opacity-50 border-dashed scale-[0.98]' : ''
                                         )}
                                     >
+                                        <div
+                                            className="mr-3 shrink-0 text-primary cursor-grab active:cursor-grabbing hover:bg-primary/10 p-1 rounded-md transition-colors"
+                                            onClick={(e) => e.stopPropagation()} // Prevent toggling selection when gripping
+                                        >
+                                            <GripVertical className="w-4 h-4" />
+                                        </div>
                                         <div className={cn(
                                             "w-5 h-5 rounded-full border flex items-center justify-center mr-3 shrink-0 transition-colors",
                                             selectedItems.includes(item.index) ? "border-primary bg-primary" : "border-muted-foreground/50"
                                         )}>
                                             {selectedItems.includes(item.index) && <Check className="w-3 h-3 text-primary-foreground" />}
                                         </div>
-                                        <span className="text-sm font-medium text-foreground line-clamp-1">{`P${item.index}: ${item.title}`}</span>
+                                        <span className="text-sm font-medium text-foreground line-clamp-1">{`P${mapIndex + 1}: ${item.title}`}</span>
                                     </div>
                                 ))}
                             </div>

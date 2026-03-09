@@ -3,6 +3,7 @@ import { exec } from 'child_process';
 import util from 'util';
 import path from 'path';
 import fs from 'fs';
+import { jsonrepair } from 'jsonrepair';
 import OSS from 'ali-oss';
 import dotenv from 'dotenv';
 import { fetchBilibiliSubtitle, fetchBilibiliMedia } from './fetchBilibiliSubtitle';
@@ -98,7 +99,7 @@ ${snippet}
                 { role: 'user', content: prompt }
             ]
         });
-        const parsed = JSON.parse(resp.choices[0].message.content || '{}');
+        const parsed = JSON.parse(jsonrepair(resp.choices[0].message.content || '{}'));
         if (parsed.split_recommended && Array.isArray(parsed.chapters) && parsed.chapters.length >= 2) {
             return parsed as BookPreflightResult;
         }
@@ -299,10 +300,28 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                         const cleanRegion = (process.env.ALIYUN_OSS_REGION || '').replace(/['"]/g, '').replace('.aliyuncs.com', '').trim();
                         const cleanBucket = (process.env.ALIYUN_OSS_BUCKET || '').replace(/['"]/g, '').trim().replace(/[^a-z0-9-]/g, '');
                         const client = new OSS({ region: cleanRegion, accessKeyId: cleanKeyId, accessKeySecret: cleanKeySecret, bucket: cleanBucket, secure: true });
-                        await client.get(objectName, localRawFilePath);
-                        console.log(`[P${item.index}] ✅ 成功拉取本地源文件: ${localRawFilePath}`);
-                    } catch (err) {
-                        throw new Error("从 OSS 拉取上传文件失败: " + String(err));
+                        let downloadSuccess = false;
+                        let lastErr = null;
+                        for (let attempt = 1; attempt <= 3; attempt++) {
+                            try {
+                                console.log(`[P${item.index}] 尝试从 OSS 拉取本地源文件 (第 ${attempt}/3 次)...`);
+                                await client.get(objectName, localRawFilePath);
+                                console.log(`[P${item.index}] ✅ 成功拉取本地源文件: ${localRawFilePath}`);
+                                downloadSuccess = true;
+                                break;
+                            } catch (err: any) {
+                                lastErr = err;
+                                console.warn(`[P${item.index}] ⚠️ OSS 拉取失败 (第 ${attempt}/3 次): ${err.message || String(err)}`);
+                                if (attempt < 3) {
+                                    const delay = attempt * 2000;
+                                    console.log(`[P${item.index}] ⏳ 等待 ${delay}ms 后重试...`);
+                                    await new Promise(r => setTimeout(r, delay));
+                                }
+                            }
+                        }
+                        if (!downloadSuccess) {
+                            throw new Error(`从 OSS 拉取上传文件失败 (已重试3次): ${String(lastErr)}`);
+                        }
                     } finally {
                         mediaSemaphore.release();
                     }
@@ -315,7 +334,7 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                         if (['.srt', '.vtt'].includes(localExtension)) {
                             fullText = fullText
                                 .replace(/^\d+\s*$/gm, '')
-                                .replace(/\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[,.]\d{3}/g, '')
+                                .replace(/(?:(?:00:)?(\d{2}:\d{2})|(\d{1,2}:\d{2}:\d{2}))[,.]\d{3}\s*-->\s*[\d:.,]+/g, (match, mmss, hhmmss) => `[${mmss || hhmmss}]`)
                                 .replace(/<{1}[^>]+>{1}/g, '')
                                 .replace(/\n{2,}/g, ' ')
                                 .trim();
@@ -423,10 +442,10 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                             const subFiles = fs.readdirSync(subDir).filter(f => f.startsWith(expectedBaseName) && (f.endsWith('.srt') || f.endsWith('.vtt')));
                             if (subFiles.length > 0) {
                                 const subContent = fs.readFileSync(path.join(subDir, subFiles[0]), 'utf-8');
-                                // 清洗 SRT 格式：去掉序号、时间戳行，只留文字
+                                // 清洗 SRT 格式：去掉序号，保留开始时间为 [MM:SS]
                                 fullText = subContent
                                     .replace(/^\d+\s*$/gm, '')              // 序号行
-                                    .replace(/\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[,.]\d{3}/g, '') // 时间戳行
+                                    .replace(/(?:(?:00:)?(\d{2}:\d{2})|(\d{1,2}:\d{2}:\d{2}))[,.]\d{3}\s*-->\s*[\d:.,]+/g, (match, mmss, hhmmss) => `[${mmss || hhmmss}]`) // 时间戳行
                                     .replace(/<[^>]+>/g, '')                 // HTML 标签
                                     .replace(/\n{2,}/g, ' ')                 // 多余换行
                                     .trim();
@@ -571,7 +590,32 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                                         const transRes = await fetch(transUrl);
                                         const transData = await transRes.json();
                                         const transcripts = transData.transcripts || [];
-                                        fullText = transcripts.map((t: any) => t.text || "").join(' ') || "转录结果为空";
+                                        fullText = transcripts.map((t: any) => {
+                                            const sentences = t.sentences || [];
+                                            if (sentences.length > 0) {
+                                                return sentences.map((s: any) => {
+                                                    let text = s.text || "";
+                                                    if (s.begin_time !== undefined) {
+                                                        const totalSeconds = Math.floor(s.begin_time / 1000);
+                                                        const minutes = Math.floor(totalSeconds / 60);
+                                                        const seconds = totalSeconds % 60;
+                                                        const timeStr = `[${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}]`;
+                                                        return `${timeStr} ${text}`;
+                                                    }
+                                                    return text;
+                                                }).join('\n');
+                                            } else {
+                                                let text = t.text || "";
+                                                if (t.begin_time !== undefined) {
+                                                    const totalSeconds = Math.floor(t.begin_time / 1000);
+                                                    const minutes = Math.floor(totalSeconds / 60);
+                                                    const seconds = totalSeconds % 60;
+                                                    const timeStr = `[${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}]`;
+                                                    return `${timeStr} ${text}`;
+                                                }
+                                                return text;
+                                            }
+                                        }).join('\n') || "转录结果为空";
                                     } catch (e) {
                                         console.error(`[P${item.index}] 提取实际转录结果失败:`, e);
                                         fullText = "转录结果文件下载失败";
@@ -703,7 +747,7 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                                     });
                                     const rawContent = completion.choices[0].message.content || '{}';
                                     chapResult.summary = rawContent;
-                                    const parsed = JSON.parse(rawContent);
+                                    const parsed = JSON.parse(jsonrepair(rawContent));
                                     chapResult.chapters = parsed.chapters || [];
                                     chapResult.terms = parsed.terms || [];
                                     console.log(`[P${item.index}→Ch${ci + 1}] ✅ 章节「${chap.title}」提取成功`);
@@ -762,10 +806,14 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                             apiKey: deepseekKey
                         });
 
-                        // 动态切换知识库架构提示词，支持本地纯文档的自由时间提取
+                        // 动态切换知识库架构提示词，支持自由时间提取
                         const systemPrompt = `你是一名极度理性的专属知识库架构师。
 核心任务是将${isLocalTask ? '本地上传的多模态资源（如视频、会议纪要或纯文图资料）' : '视频文稿'}萃取为原子化、**树状层级**的知识卡片流 (Card Flow)。
-${isLocalTask ? '\n【时间戳动态处理指令 (针对本地合集)】\n识别输入内容的格式属性：如果文本存在明显的时间流标志（类似 [02:30]、1:23:45 甚至 "此时此刻" 等暗示时间轴的词汇），你必须在知识节点下提炼规整的 [MM:SS] 时间戳用于 timestamp 字段。\n如果整段文稿是纯阅读向的材料、论文或无时间顺序的纪要，请忽略 timestamp 字段并且【严禁】为了迎合结构强行编造 [00:00]。\n' : ''}
+
+【时间戳动态处理指令】
+识别输入内容的格式属性：如果内容存在明显的时间流标志（如字幕自带时间前缀像 [02:30]、1:23:45 甚至 "此时此刻" 等暗示时间轴的字眼），你必须在知识节点下提炼规整的 [MM:SS] 时间戳用于 timestamp 字段。
+如果整段文稿是纯阅读向的材料、论文或无时间顺序的纪要，请忽略 timestamp 字段并且【严禁】为了迎合结构强行编造 [00:00]。
+
 【格式要求】
 必须严格输出以下格式的纯 JSON 数据，禁止任何 Markdown 代码块包装（不要 \`\`\`json 的 markdown 容器），直接以 { 开始，以 } 结束。
 
@@ -831,7 +879,7 @@ chapters: [{ nodes: [{ title: "打开设置" }, { title: "选择16:9" }, { title
                         const rawContent = completion.choices[0].message.content || '{}';
                         resultObj.summary = rawContent;
                         try {
-                            const parsed = JSON.parse(rawContent);
+                            const parsed = JSON.parse(jsonrepair(rawContent));
                             resultObj.chapters = parsed.chapters || [];
                             resultObj.terms = parsed.terms || [];
                         } catch (e) {
@@ -925,7 +973,7 @@ chapters: [{ nodes: [{ title: "打开设置" }, { title: "选择16:9" }, { title
             let globalTitle = '全集总览';
             let globalOverview = '';
             try {
-                const toResult = JSON.parse(titleOverviewCompletion.choices[0].message?.content || '{}');
+                const toResult = JSON.parse(jsonrepair(titleOverviewCompletion.choices[0].message?.content || '{}'));
                 globalTitle = toResult.title || globalTitle;
                 globalOverview = toResult.overview || globalOverview;
                 console.log(`[Map-Reduce 1/4] ✅ title="${globalTitle}", overview="${globalOverview}"`);
@@ -939,12 +987,17 @@ chapters: [{ nodes: [{ title: "打开设置" }, { title: "选择16:9" }, { title
 
             const allSummaries = successResults.map(r => `[第${r.index}部分 ${r.title}]\n` + JSON.stringify(r.chapters)).join('\n\n');
             const safeAllSummaries = limitTextByteLength(allSummaries, 60000);
+            const validSourceIndexes = successResults.map(r => r.index);
+            const exampleSources = validSourceIndexes.slice(0, 2).join(', ');
 
             const planningCompletion = await openai.chat.completions.create({
                 messages: [
                     {
                         role: "system", content: `你是一名宏观知识架构师。用户提供了一个${contentType}的所有部分的结构化数据。
-你的任务是：分析所有部分的内容，识别出贯穿全集的 3-6 个宏观知识主题，并指出每个主题的内容主要来自哪几部分。
+你的任务是：梳理这批内容的逻辑脉络，**完全自主决定**划分为几个宏观知识主题。**不要受拘束于任意固定的主题数量**。
+- 如果这是一门从头到尾结构严密的系统课，请直接将它们融合成少数几个（如 1-3 个）真正具备全局纵深的超级大模块。
+- 如果这里面涉及了多个完全跳跃、独立的知识切面，请果断拆分出相应的独立架构（即使有十几个模块也可以）。
+唯一准则：模块数量只取决于内容的知识跨度和逻辑转换点。宁要厚重的一篇，不要为了拆分而拆解出的凑数章节。
 
 【输出格式】纯 JSON，禁止 markdown：
 {
@@ -953,7 +1006,7 @@ chapters: [{ nodes: [{ title: "打开设置" }, { title: "选择16:9" }, { title
       "id": "theme_01",
       "title": "宏观主题名称（高度归纳）",
       "description": "一句话说明这个主题涵盖什么",
-      "sources": [1001, 1003, 1005] // 注意：这里的来源归属必须是提供的文本中标明的实际数字，例如 1001, 2005 等，不要简写
+      "sources": [${exampleSources}] // 必须严格从提供的数字池 [${validSourceIndexes.join(', ')}] 中选取，代表涵盖了哪些部分。绝对禁止编造任何不存在的数字。
     }
   ]
 }
@@ -973,7 +1026,7 @@ chapters: [{ nodes: [{ title: "打开设置" }, { title: "选择16:9" }, { title
 
             let themes: any[] = [];
             try {
-                const planResult = JSON.parse(planningCompletion.choices[0].message?.content || '{}');
+                const planResult = JSON.parse(jsonrepair(planningCompletion.choices[0].message?.content || '{}'));
                 themes = planResult.themes || [];
                 console.log(`[Map-Reduce 2/4] ✅ 识别出 ${themes.length} 个跨集主题：${themes.map((t: any) => t.title).join(' | ')}`);
             } catch (e) {
@@ -1023,7 +1076,7 @@ chapters: [{ nodes: [{ title: "打开设置" }, { title: "选择16:9" }, { title
 
                 const timeStampInstructionRule = isDocument ?
                     `5. 去除伪时间戳：来源出处只写入 timestamp 字段（例如填入 "P1001" 或 "P1001, P1003"）。因为原始分集是一本书或文档，**绝对禁止**擅自编造出分秒时间戳（如 "05:15"），只保留来源集数即可。` :
-                    `5. 时间戳去重：来源集数和时间信息只写在 timestamp 字段中，禁止在 content 和 point 的正文里重复写时间戳（如"P13 00:30"），避免前端重复显示。`;
+                    `5. 时间戳去重与防伪：如果原文本身没有具体的分秒时间，timestamp 字段**仅允许写来源集数（如 "P13" 或 "来自 P13, P14"）**。**极其严禁大模型擅自编造 00:00 或任何虚假的分秒时间！** 只有在原文明确提供了具体分秒时才可以拼接到后面（如 "P13 02:30"），且严禁在 content 和 point 正文里重复写时间。`;
 
                 const themeCompletion = await openai.chat.completions.create({
                     messages: [
@@ -1134,7 +1187,7 @@ ${timeStampInstructionRule}`
                     temperature: 0.2,
                     max_tokens: 4096
                 });
-                const termsResult = JSON.parse(termsCompletion.choices[0].message?.content || '{}');
+                const termsResult = JSON.parse(jsonrepair(termsCompletion.choices[0].message?.content || '{}'));
                 globalTerms = termsResult.terms || [];
                 console.log(`[Map-Reduce 4/4] ✅ 术语词典合并完成，共 ${globalTerms.length} 个术语`);
             } catch (e) {
