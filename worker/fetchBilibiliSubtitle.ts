@@ -245,7 +245,13 @@ export async function fetchBilibiliSubtitle(
             return { success: false, text: '', method: 'wbi_api', error: '字幕文件内容为空' };
         }
 
-        const fullText = body.map(item => item.content).join(' ');
+        const fullText = body.map(item => {
+            const totalSeconds = Math.floor(item.from);
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            const timeStr = `[${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}]`;
+            return `${timeStr} ${item.content}`;
+        }).join('\\n');
         console.log(`[字幕直取] ✅ 成功！共 ${body.length} 条字幕，合计 ${fullText.length} 字符`);
 
         return { success: true, text: fullText, method: 'bilibili_api' };

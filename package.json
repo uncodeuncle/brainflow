@@ -10,6 +10,7 @@
     "start": "next start -p 3012",
     "lint": "eslint",
     "worker": "tsx worker/index.ts",
+    "setup": "node setup.js && npm run setup:deps",
     "setup:deps": "node setup-deps.js"
   },
   "dependencies": {
@@ -29,6 +30,7 @@
     "clsx": "^2.1.1",
     "idb": "^8.0.3",
     "ioredis": "^5.9.3",
+    "jsonrepair": "^3.13.2",
     "jspdf": "^4.2.0",
     "jspdf-autotable": "^5.0.7",
     "lucide-react": "^0.575.0",

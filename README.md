@@ -15,54 +15,37 @@
 
 ---
 
-## 🚀 极速部署指北
+## 🚀 极速一键部署指北 (双击启动流)
 
-无论您是部署在本地还是云服务器，都能在 3 分钟内跑通！
+无论您是纯正的技术小白，还是不想折腾的高端玩家，这套部署系统将让您在 1 分钟内跑通一切！
 
 ### 前置要求
-- [Node.js](https://nodejs.org/) (推荐 >= 18.0)
-- [FFmpeg](https://ffmpeg.org/) (必须安装并配置到系统环境变量 `PATH` 中，用于音视频处理)
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp#installation) (必须安装并配置到系统环境变量 `PATH` 中，或放置于项目根目录的 `bin/` 文件夹下)
-- **Redis** — BrainFlow 使用 BullMQ 管理后台任务队列，因此需要 Redis 实例（见下方 Redis 部署方案）
+- **[Node.js](https://nodejs.org/)** (请前往官网下载稳定版并无脑下一步安装，必须)
+- **Redis** — BrainFlow 后台强依赖 Redis 进行任务队列派发（极力推荐零配置的免费云端 [Upstash](https://upstash.com/)，详见下方方案）
 
-### 1. 下载源码
+*(注：系统需要的 FFmpeg 和 yt-dlp 已经不再需要您手动下载及配置烦人的环境变量，我们的装机向导会自动给您打理好一切！)*
 
-你可以通过 Git 克隆，或者在网页右上角直接点击 `Code -> Download ZIP`。
-\`\`\`bash
-git clone https://github.com/uncodeuncle/brainflow.git
-cd brainflow
-\`\`\`
+### 第 1 步：下载源码
+您可以在网页右上角直接点击 `Code -> Download ZIP`，然后解压到您喜欢的地方。
 
-### 2. 安装依赖 & 配置环境变量
+### 第 2 步：双击安装
+进入解压后的文件夹内：
+- 🪟 **Windows 用户**: 找到并连按两次 **`install.bat`**。
+- 🍎 **Mac / Linux 用户**: 打开终端执行 `bash install.sh`。
 
-```bash
-npm install
-cp .env.example .env
-```
+向导会被唤醒，它将：
+1. **自动帮您下载数万个 NPM 依赖代码**
+2. **通过一问一答，贴心帮您配置大模型及阿里云的 API 秘钥**（可以直接回车跳过后续手动在 `.env` 里填）
+3. **全自动匹配您的操作系统，下载所需版本的 FFmpeg 与归档工具放到项目中，绝对不弄脏您的电脑系统变量！**
 
-然后打开 `.env` 文件，按照注释填写您的 API 密钥（见下方[高级配置](#-高级配置与手动设置)章节）。
+您只需要看着它跑完，显示配置完毕即可。
 
-### 3. 本地开发 (一键双栈启动)
+### 第 3 步：一键发车
+安装成功后，日常使用只需要：
+- 🪟 **Windows 用户**: 连按两次 **`start.bat`**。
+- 🍎 **Mac / Linux 用户**: 执行 `bash start.sh`。
 
-```bash
-npm run dev:all
-```
-
-这会同时启动 Next.js 前端服务 (`localhost:3000`) 和后台任务 Worker，无需开两个终端。
-
-### 4. 生产部署
-
-运行环境构建：
-\`\`\`bash
-npm run build
-\`\`\`
-
-如果您是部署在云端服务器，我们推荐使用 PM2 守护进程：
-\`\`\`bash
-npm install -g pm2
-npm run pm2
-\`\`\`
-服务默认启动于 `http://localhost:3000`。您可以通过 Nginx 代理暴露给外部域名。
+系统会自动同时拉起前端的 Next.js 服务以及躲在幕后的 AI 解析引擎，并在几秒后**自动为您打开默认浏览器**访问 `http://localhost:3000`！
 
 ---
 

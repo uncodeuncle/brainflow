@@ -96,6 +96,10 @@ export function Reader({ jobId, onBack, saveResults, initialResults, initialCopi
 
     // Default to the original items requested by the user
     let requestedItems = status?.originalData?.items || [];
+    if (requestedItems.length === 0 && activeResults && activeResults.length > 0) {
+        // Fallback for older history records that don't have originalData saved
+        requestedItems = activeResults.map((r: any) => ({ index: r.index, title: r.title || `片段 ${r.index}` }));
+    }
 
     // Compute effective display items to support dynamically spawned book chapters (index >= 1000)
     let displayItemsMap = new Map();
