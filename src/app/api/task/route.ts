@@ -26,20 +26,13 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Source URL is missing' }, { status: 400 });
         }
 
-        // --- Final Defensive Sanitization before Redis ---
         const extractCleanUrl = (rawInput: string): string => {
             const input = rawInput.trim();
-            const urlStartIndex = input.search(/https?:\/\//i);
-            if (urlStartIndex !== -1) {
-                const substring = input.slice(urlStartIndex);
-                // Strip only whitespace, standard Chinese characters, and full-width punctuation
-                const match = substring.match(/^([^\s\u4e00-\u9fa5\u3000-\u303F\uFF00-\uFFEF]+)/);
-                if (match && match[1]) return match[1];
-            }
-            // Fallback: If no http found, guess the domain block and prepend https://
-            const fallbackMatch = input.match(/^([^\s\u4e00-\u9fa5\u3000-\u303F\uFF00-\uFFEF]+)/);
-            const domain = fallbackMatch ? fallbackMatch[1] : input;
-            return /^https?:\/\//i.test(domain) ? domain : 'https://' + domain;
+            const match = input.match(/https?:\/\/[^\s\u4e00-\u9fa5\u3000-\u303F\uFF00-\uFFEF]+/i);
+            if (match) return match[0];
+            const domainBlock = input.match(/[a-zA-Z0-9][-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)/i);
+            if (domainBlock) return 'https://' + domainBlock[0];
+            return /^https?:\/\//i.test(input) ? input : 'https://' + input;
         };
 
         url = extractCleanUrl(url);

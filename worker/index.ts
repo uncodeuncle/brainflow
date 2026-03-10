@@ -182,7 +182,7 @@ const worker = new Worker('bili-extract', async (job: Job) => {
     console.log(`[JOB 启动] 收到新任务 ID: ${job.id}`);
     console.log(`待处理的 P 数量: ${job.data.items?.length}, 需要输出格式: markdown:${job.data.formats.markdown} marp:${job.data.formats.marp} mermaid:${job.data.formats.mermaid}`);
 
-    await job.updateProgress({ step: 'init', message: '任务已进入队列', percent: 5 });
+    await job.updateProgress({ step: 'init', message: '正在排队中...', percent: 5 });
 
     const items = job.data.items || [];
     const results: any[] = [];
@@ -219,7 +219,7 @@ const worker = new Worker('bili-extract', async (job: Job) => {
             const safeTitle = item.title.replace(/[\\/:*?"<>|]/g, '_');
 
             console.log(`\n---> 开始处理 P${item.index} : ${item.title}`);
-            await safeUpdateProgress({ step: 'download', p: item.index, title: item.title, message: '提取结构化文本中...', percent: Math.round(baseProgress + stepProgress * 1), partialResults: results });
+            await safeUpdateProgress({ step: 'download', p: item.index, title: item.title, message: '内容识别中...', percent: Math.round(baseProgress + stepProgress * 1), partialResults: results });
 
 
             try {
@@ -250,14 +250,13 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                 }
                 const robustNetworkArgs = `--retries 30 --fragment-retries 30 --retry-sleep 3 --continue --sleep-requests 1 --sleep-interval 2 --max-sleep-interval 5 ${cookieArg} --extractor-args "bilibili:player_client=h5" --add-header "Referer: https://www.bilibili.com/" --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"`;
 
-                const rawUrl = job.data.url.replace(/^(?!https?:\/\/)/i, 'https://');
+                const rawUrl = job.data.url;
                 let parsedUrl: URL;
                 try {
                     parsedUrl = new URL(rawUrl);
                 } catch (e) {
                     throw new Error(`无法解析该链接，请提供标准的网址 (Invalid URL: ${rawUrl})`);
                 }
-                // Keep query params for non-bilibili sites (like Xiaohongshu) as they contain required security tokens (xsec_token)
                 const isBilibili = parsedUrl.hostname.includes('bilibili.com') || parsedUrl.hostname.includes('b23.tv');
                 const cleanUrl = isBilibili ? `${parsedUrl.origin}${parsedUrl.pathname}` : rawUrl;
 
@@ -292,7 +291,7 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                 // 【分支一：本地上传直通车】
                 if (isLocalTask) {
                     console.log(`[P${item.index}] 🏠 检测到本地上传任务，开始直接从 OSS 拉取源文件...`);
-                    await safeUpdateProgress({ step: 'download', p: item.index, message: '提取云端缓存资产...', percent: Math.round(baseProgress + stepProgress * 0.5), partialResults: results });
+                    await safeUpdateProgress({ step: 'download', p: item.index, message: '内容识别中...', percent: Math.round(baseProgress + stepProgress * 0.5), partialResults: results });
 
                     const ossUrlMatch = item.localOssUrl?.match(/^oss:\/\/[^\/]+\/(.+)$/);
                     if (!ossUrlMatch) throw new Error("无效的本地 OSS URL: " + item.localOssUrl);
@@ -411,7 +410,7 @@ const worker = new Worker('bili-extract', async (job: Job) => {
 
                     // --------------- 优先级一：源平台 API 字幕直取 (0成本, 秒级) ---------------
                     console.log(`[P${item.index}] 🚀 尝试源平台 API 字幕直取...`);
-                    await safeUpdateProgress({ step: 'transcribe', p: item.index, message: '正在提取核心信息...', percent: Math.round(baseProgress + stepProgress * 1), partialResults: results });
+                    await safeUpdateProgress({ step: 'transcribe', p: item.index, message: '提取核心信息...', percent: Math.round(baseProgress + stepProgress * 1), partialResults: results });
 
                     if (!sessdata) {
                         console.log(`[P${item.index}] ⚠️ 未提供 SESSDATA，API 可能无法返回完整字幕数据`);
@@ -432,7 +431,7 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                     } else {
                         // --------------- 优先级二：yt-dlp --write-sub 提取字幕文件 ---------------
                         console.log(`[P${item.index}] ⚠️ API 字幕不可用 (${subtitleResult.error}), 尝试 yt-dlp 字幕提取...`);
-                        await safeUpdateProgress({ step: 'transcribe', p: item.index, message: '正在提取内容...', percent: Math.round(baseProgress + stepProgress * 1.5), partialResults: results });
+                        await safeUpdateProgress({ step: 'transcribe', p: item.index, message: '提取核心信息...', percent: Math.round(baseProgress + stepProgress * 1.5), partialResults: results });
 
                         try {
                             const subDir = path.join(hiddenDir, 'subs');
@@ -467,7 +466,7 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                 // --------------- 优先级三：兜底 - 下载音频 + DashScope Paraformer 转录 (按量计费) ---------------
                 if (!fullText || fullText.length < 50) {
                     console.log(`[P${item.index}] ⚠️ 字幕均不可用，降级到 DashScope Paraformer 极速语音大模型识别...`);
-                    await safeUpdateProgress({ step: 'download', p: item.index, message: '启动 Paraformer 大模型听写...', percent: Math.round(baseProgress + stepProgress * 2), partialResults: results });
+                    await safeUpdateProgress({ step: 'download', p: item.index, message: '提取结构化文本...', percent: Math.round(baseProgress + stepProgress * 2), partialResults: results });
 
                     // Audio extraction via 原生 API (bypasses yt-dlp 412)
                     // 带宽密集段：下载 + FFmpeg + OSS 上传 → 完成后释放 media slot
@@ -526,7 +525,7 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                     // DashScope Paraformer Transcription
                     // See API Docs: https://help.aliyun.com/zh/model-studio/developer-reference/record-file-recognition
                     console.log('正在提交阿里云 DashScope (Paraformer) 录音文件识别任务...');
-                    await safeUpdateProgress({ step: 'transcribe', p: item.index, message: '大模型极速转录中...', percent: Math.round(baseProgress + stepProgress * 3), partialResults: results });
+                    await safeUpdateProgress({ step: 'transcribe', p: item.index, message: '提取结构化文本...', percent: Math.round(baseProgress + stepProgress * 3), partialResults: results });
 
                     const dashscopeKey = (process.env.DASHSCOPE_API_KEY as string)?.replace(/['"]/g, '').trim();
 
@@ -582,7 +581,7 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                                     throw new Error("DashScope 任务被意外取消");
                                 }
 
-                                await safeUpdateProgress({ step: 'transcribe', p: item.index, message: `模型分析中 (排队/处理中)...`, percent: Math.round(baseProgress + stepProgress * 3), partialResults: results });
+                                await safeUpdateProgress({ step: 'transcribe', p: item.index, message: `内容分析中...`, percent: Math.round(baseProgress + stepProgress * 3), partialResults: results });
                             }
 
                             if (!transcriptionResult) throw new Error("DashScope 大模型转录超时");
@@ -712,7 +711,7 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                     const deepseekKey = (process.env.DEEPSEEK_API_KEY as string)?.replace(/['\"]/g, '').trim();
                     if (deepseekKey) {
                         console.log(`[P${item.index}] 📚 启动书籍识别探针 (${fullText.length} 字)...`);
-                        await safeUpdateProgress({ step: 'book_preflight', p: item.index, message: '正在智能识别文档结构...', percent: Math.round(baseProgress + stepProgress * 3.5), partialResults: results });
+                        await safeUpdateProgress({ step: 'book_preflight', p: item.index, message: '内容分析中...', percent: Math.round(baseProgress + stepProgress * 3.5), partialResults: results });
 
                         const preflight = await runBookPreflight(fullText, deepseekKey);
                         console.log(`[P${item.index}] 📚 探针结果: doc_type=${preflight.doc_type}, split=${preflight.split_recommended}, reason=${preflight.split_reason}`);
@@ -739,7 +738,7 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                                     error: null,
                                 };
                                 try {
-                                    await safeUpdateProgress({ step: 'ai_brain', p: chapIndex, message: `正在解析：${chap.title}`, percent: Math.round(baseProgress + stepProgress * 4 * ((ci + 1) / chapterTexts.length)), partialResults: results });
+                                    await safeUpdateProgress({ step: 'ai_brain', p: chapIndex, message: `知识萃取中...`, percent: Math.round(baseProgress + stepProgress * 4 * ((ci + 1) / chapterTexts.length)), partialResults: results });
                                     const systemPrompt = `你是一名极度理性的专属知识库架构师。\n核心任务是将书籍章节内容萃取为原子化、**树状层级**的知识卡片流 (Card Flow)。\n该章节来自《${item.title}》的"${chap.title}"部分。\n【格式要求】必须严格输出纯 JSON，禁止任何 Markdown 代码块包装，直接以 { 开始。\n{"chapters":[{"id":"chapter_01","title":"<高度归纳的本章核心议题>","nodes":[{"id":"card_01","title":"节点标题","type":"concept","content":"核心概述","detailedPoints":[{"point":"具体细节"}],"relations":[]}]}],"terms":[{"term":"专业词","brief":"解释"}]}`;
                                     const completion = await openai.chat.completions.create({
                                         messages: [
@@ -794,7 +793,7 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                     console.log(`[P${item.index}] ✅ 短内容已生成占位卡片`);
                 } else {
                     console.log('调用 DeepSeek 提取高颗粒度知识模块...');
-                    await safeUpdateProgress({ step: 'ai_brain', p: item.index, message: '正在进行深度知识萃取...', percent: Math.round(baseProgress + stepProgress * 4), partialResults: results });
+                    await safeUpdateProgress({ step: 'ai_brain', p: item.index, message: '知识萃取中...', percent: Math.round(baseProgress + stepProgress * 4), partialResults: results });
 
                     // Pass full text to DeepSeek (no truncation)
                     const safeFullText = fullText;
@@ -949,7 +948,7 @@ chapters: [{ nodes: [{ title: "打开设置" }, { title: "选择16:9" }, { title
             const contentType = isDocumentMR ? '长篇文档或书籍的章节集' : '系列视频';
 
             // ========== 第一步：轻量调用生成 title + overview ==========
-            await safeUpdateProgress({ step: 'map_reduce', message: '正在生成合集概览...', percent: 88, partialResults: results });
+            await safeUpdateProgress({ step: 'map_reduce', message: '内容分析中...', percent: 88, partialResults: results });
             console.log('[Map-Reduce 1/4] 生成合集 title + overview...');
 
             // 构建精华骨架：只取成功的分P
@@ -987,7 +986,7 @@ chapters: [{ nodes: [{ title: "打开设置" }, { title: "选择16:9" }, { title
             }
 
             // ========== 第 2a 步：结构规划 —— 识别跨集宏观主题 ==========
-            await safeUpdateProgress({ step: 'map_reduce', message: '正在规划跨集知识结构...', percent: 90, partialResults: results });
+            await safeUpdateProgress({ step: 'map_reduce', message: '规划跨集知识结构...', percent: 90, partialResults: results });
             console.log('[Map-Reduce 2/4] 结构规划：识别跨集主题骨架...');
 
             const allSummaries = successResults.map(r => `[第${r.index}部分 ${r.title}]\n` + JSON.stringify(r.chapters)).join('\n\n');
@@ -1052,7 +1051,7 @@ chapters: [{ nodes: [{ title: "打开设置" }, { title: "选择16:9" }, { title
 
             // ========== 第 2b 步：全并发主题深度融合 ==========
             console.log(`[Map-Reduce 3/4] 开始并发融合 ${themes.length} 个主题...`);
-            await safeUpdateProgress({ step: 'map_reduce', message: `正在并发融合 ${themes.length} 个主题...`, percent: 91, partialResults: results });
+            await safeUpdateProgress({ step: 'map_reduce', message: `合并主题中...`, percent: 91, partialResults: results });
 
             const globalChapters: any[] = new Array(themes.length);
 
@@ -1160,7 +1159,7 @@ ${timeStampInstructionRule}`
             }));
 
             // ========== 第 2c 步：术语合并去重 ==========
-            await safeUpdateProgress({ step: 'map_reduce', message: '正在整合全局术语词典...', percent: 96, partialResults: results });
+            await safeUpdateProgress({ step: 'map_reduce', message: '编排输出中...', percent: 96, partialResults: results });
             console.log('[Map-Reduce 4/4] 术语合并去重...');
 
             const allTerms = successResults.flatMap(r => (r.terms || []).map((t: any) => `${t.term}：${t.brief || t.definition || ''}`));
@@ -1226,7 +1225,7 @@ ${timeStampInstructionRule}`
 
     // Formatting phase
     console.log('---> 开始合并处理格式');
-    await safeUpdateProgress({ step: 'formatting', message: '正在编排输出并打包...等待剩余后台文件', percent: 97, partialResults: results });
+    await safeUpdateProgress({ step: 'formatting', message: '编排输出中...', percent: 97, partialResults: results });
 
     // Wait for all background video downloads to finish before ZIP formatting
     if (videoDownloadPromises.length > 0) {
