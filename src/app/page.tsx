@@ -79,6 +79,7 @@ export default function Home() {
 
       const data = await res.json();
       if (res.ok) {
+        if (data.url) setUrl(data.url); // Sync the input box with the clean URL
         setAnalyzeData(data);
         setIsModalOpen(true);
       } else {

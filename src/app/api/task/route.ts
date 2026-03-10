@@ -16,7 +16,7 @@ export async function POST(req: Request) {
         // items: array of selected P items to download
         // formats: object indicating what to output (markdown, marp, mermaid, downloadVideo)
         // url: original Bilibili URL to download from string
-        const { items, formats, url, sessdata, type, rawData } = data;
+        let { items, formats, url, sessdata, type, rawData } = data;
 
         if (!items || items.length === 0) {
             return NextResponse.json({ error: 'No items selected' }, { status: 400 });
@@ -25,6 +25,24 @@ export async function POST(req: Request) {
         if (!url) {
             return NextResponse.json({ error: 'Source URL is missing' }, { status: 400 });
         }
+
+        // --- Final Defensive Sanitization before Redis ---
+        const extractCleanUrl = (rawInput: string): string => {
+            const input = rawInput.trim();
+            const urlStartIndex = input.search(/https?:\/\//i);
+            if (urlStartIndex !== -1) {
+                const substring = input.slice(urlStartIndex);
+                // Strip only whitespace, standard Chinese characters, and full-width punctuation
+                const match = substring.match(/^([^\s\u4e00-\u9fa5\u3000-\u303F\uFF00-\uFFEF]+)/);
+                if (match && match[1]) return match[1];
+            }
+            // Fallback: If no http found, guess the domain block and prepend https://
+            const fallbackMatch = input.match(/^([^\s\u4e00-\u9fa5\u3000-\u303F\uFF00-\uFFEF]+)/);
+            const domain = fallbackMatch ? fallbackMatch[1] : input;
+            return /^https?:\/\//i.test(domain) ? domain : 'https://' + domain;
+        };
+
+        url = extractCleanUrl(url);
 
         // Add job to the queue
         const job = await extractQueue.add('process-video', {

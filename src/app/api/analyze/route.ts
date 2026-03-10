@@ -286,6 +286,7 @@ export async function POST(req: Request) {
 
         // Normalize response for the frontend
         const result = {
+            url, // Return the cleaned URL to the frontend
             isPlaylist: data._type === 'playlist',
             id: data.id || data.entries?.[0]?.id,
             title: data.title || data.entries?.[0]?.playlist || data.entries?.[0]?.title || "未命名内容",
