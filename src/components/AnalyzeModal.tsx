@@ -35,12 +35,9 @@ export function AnalyzeModal({ isOpen, onOpenChange, data, onConfirm }: any) {
         e.dataTransfer.dropEffect = "move";
     };
 
-    const handleDrop = (e: React.DragEvent, targetId: string) => {
+    const handleDragEnter = (e: React.DragEvent, targetId: string) => {
         e.preventDefault();
-        if (!draggingId || draggingId === targetId) {
-            setDraggingId(null);
-            return;
-        }
+        if (!draggingId || draggingId === targetId) return;
 
         setDisplayEntries(prev => {
             const oldIndex = prev.findIndex(item => item.index.toString() === draggingId);
@@ -52,6 +49,10 @@ export function AnalyzeModal({ isOpen, onOpenChange, data, onConfirm }: any) {
             newEntries.splice(newIndex, 0, movedItem);
             return newEntries;
         });
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
         setDraggingId(null);
     };
 
@@ -140,8 +141,9 @@ export function AnalyzeModal({ isOpen, onOpenChange, data, onConfirm }: any) {
                                         onClick={() => toggleItem(item.index)}
                                         draggable="true"
                                         onDragStart={(e) => handleDragStart(e, item.index.toString())}
+                                        onDragEnter={(e) => handleDragEnter(e, item.index.toString())}
                                         onDragOver={handleDragOver}
-                                        onDrop={(e) => handleDrop(e, item.index.toString())}
+                                        onDrop={handleDrop}
                                         onDragEnd={() => setDraggingId(null)}
                                         className={cn(
                                             "flex items-center p-3 rounded-xl border cursor-pointer transition-all shadow-sm",
