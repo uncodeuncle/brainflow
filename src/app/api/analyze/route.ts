@@ -18,8 +18,28 @@ export async function POST(req: Request) {
         if (!url) {
             return NextResponse.json({ error: 'URL is required' }, { status: 400, headers: corsHeaders });
         }
-        // Normalize: add https:// if protocol is missing (e.g. mobile share links)
-        if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+
+        // --- Robust URL Extractor ---
+        // Safely strip Chinese sharing text while preserving complex query parameters (like xsec_token)
+        const extractCleanUrl = (rawInput: string): string => {
+            const input = rawInput.trim();
+            const urlStartIndex = input.search(/https?:\/\//i);
+
+            if (urlStartIndex !== -1) {
+                const substring = input.slice(urlStartIndex);
+                // Strip only whitespace, standard Chinese characters, and full-width punctuation
+                const match = substring.match(/^([^\s\u4e00-\u9fa5\u3000-\u303F\uFF00-\uFFEF]+)/);
+                if (match && match[1]) return match[1];
+            }
+
+            // Fallback: If no http found, guess the domain block and prepend https://
+            const fallbackMatch = input.match(/^([^\s\u4e00-\u9fa5\u3000-\u303F\uFF00-\uFFEF]+)/);
+            const domain = fallbackMatch ? fallbackMatch[1] : input;
+            return /^https?:\/\//i.test(domain) ? domain : 'https://' + domain;
+        };
+
+        // Normalize and clean the URL
+        url = extractCleanUrl(url);
 
         // ======= space.bilibili.com Collection/Series URL Handler =======
         // Handles URLs like: https://space.bilibili.com/21869937/lists/2721318?type=series

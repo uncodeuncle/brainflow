@@ -251,7 +251,12 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                 const robustNetworkArgs = `--retries 30 --fragment-retries 30 --retry-sleep 3 --continue --sleep-requests 1 --sleep-interval 2 --max-sleep-interval 5 ${cookieArg} --extractor-args "bilibili:player_client=h5" --add-header "Referer: https://www.bilibili.com/" --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"`;
 
                 const rawUrl = job.data.url.replace(/^(?!https?:\/\/)/i, 'https://');
-                const parsedUrl = new URL(rawUrl);
+                let parsedUrl: URL;
+                try {
+                    parsedUrl = new URL(rawUrl);
+                } catch (e) {
+                    throw new Error(`无法解析该链接，请提供标准的网址 (Invalid URL: ${rawUrl})`);
+                }
                 // Keep query params for non-bilibili sites (like Xiaohongshu) as they contain required security tokens (xsec_token)
                 const isBilibili = parsedUrl.hostname.includes('bilibili.com') || parsedUrl.hostname.includes('b23.tv');
                 const cleanUrl = isBilibili ? `${parsedUrl.origin}${parsedUrl.pathname}` : rawUrl;
