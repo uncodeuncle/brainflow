@@ -187,7 +187,8 @@ const worker = new Worker('bili-extract', async (job: Job) => {
     const items = job.data.items || [];
     const results: any[] = [];
     const totalItems = items.length;
-    const itemProgressWeight = 85 / (totalItems || 1);
+    const itemProgressWeight = 75 / (totalItems || 1); // 75% for all items (10% to 85%)
+    const globalOffset = 10;
 
     // 进度条水位线：只升不降，防止并发更新导致进度条回退
     let progressHWM = 5;
@@ -213,13 +214,13 @@ const worker = new Worker('bili-extract', async (job: Job) => {
     await Promise.all(items.map(async (item: any, i: number) => {
         await textSemaphore.acquire();
         try {
-            const baseProgress = 5 + (i * itemProgressWeight);
-            const stepProgress = itemProgressWeight / 4;
+            const baseProgress = globalOffset + (i * itemProgressWeight);
+            const stepProgress = itemProgressWeight;
 
             const safeTitle = item.title.replace(/[\\/:*?"<>|]/g, '_');
 
             console.log(`\n---> 开始处理 P${item.index} : ${item.title}`);
-            await safeUpdateProgress({ step: 'download', p: item.index, title: item.title, message: '内容识别中...', percent: Math.round(baseProgress + stepProgress * 1), partialResults: results });
+            await safeUpdateProgress({ step: 'download', p: item.index, title: item.title, message: '内容识别中...', percent: Math.round(baseProgress + stepProgress * 0.05), partialResults: results });
 
 
             try {
@@ -291,7 +292,7 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                 // 【分支一：本地上传直通车】
                 if (isLocalTask) {
                     console.log(`[P${item.index}] 🏠 检测到本地上传任务，开始直接从 OSS 拉取源文件...`);
-                    await safeUpdateProgress({ step: 'download', p: item.index, message: '内容识别中...', percent: Math.round(baseProgress + stepProgress * 0.5), partialResults: results });
+                    await safeUpdateProgress({ step: 'download', p: item.index, message: '内容识别中...', percent: Math.round(baseProgress + stepProgress * 0.05), partialResults: results });
 
                     const ossUrlMatch = item.localOssUrl?.match(/^oss:\/\/[^\/]+\/(.+)$/);
                     if (!ossUrlMatch) throw new Error("无效的本地 OSS URL: " + item.localOssUrl);
@@ -409,8 +410,7 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                     console.log(`[DEBUG-YTDLP] 最终决定 yt-dlp 列表参数: ${ytdlpTargetOptions}`);
 
                     // --------------- 优先级一：源平台 API 字幕直取 (0成本, 秒级) ---------------
-                    console.log(`[P${item.index}] 🚀 尝试源平台 API 字幕直取...`);
-                    await safeUpdateProgress({ step: 'transcribe', p: item.index, message: '提取核心信息...', percent: Math.round(baseProgress + stepProgress * 1), partialResults: results });
+                    await safeUpdateProgress({ step: 'transcribe', p: item.index, message: '提取核心信息...', percent: Math.round(baseProgress + stepProgress * 0.1), partialResults: results });
 
                     if (!sessdata) {
                         console.log(`[P${item.index}] ⚠️ 未提供 SESSDATA，API 可能无法返回完整字幕数据`);
@@ -431,7 +431,7 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                     } else {
                         // --------------- 优先级二：yt-dlp --write-sub 提取字幕文件 ---------------
                         console.log(`[P${item.index}] ⚠️ API 字幕不可用 (${subtitleResult.error}), 尝试 yt-dlp 字幕提取...`);
-                        await safeUpdateProgress({ step: 'transcribe', p: item.index, message: '提取核心信息...', percent: Math.round(baseProgress + stepProgress * 1.5), partialResults: results });
+                        await safeUpdateProgress({ step: 'transcribe', p: item.index, message: '提取核心信息...', percent: Math.round(baseProgress + stepProgress * 0.2), partialResults: results });
 
                         try {
                             const subDir = path.join(hiddenDir, 'subs');
@@ -466,7 +466,7 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                 // --------------- 优先级三：兜底 - 下载音频 + DashScope Paraformer 转录 (按量计费) ---------------
                 if (!fullText || fullText.length < 50) {
                     console.log(`[P${item.index}] ⚠️ 字幕均不可用，降级到 DashScope Paraformer 极速语音大模型识别...`);
-                    await safeUpdateProgress({ step: 'download', p: item.index, message: '提取结构化文本...', percent: Math.round(baseProgress + stepProgress * 2), partialResults: results });
+                    await safeUpdateProgress({ step: 'download', p: item.index, message: '提取结构化文本...', percent: Math.round(baseProgress + stepProgress * 0.25), partialResults: results });
 
                     // Audio extraction via 原生 API (bypasses yt-dlp 412)
                     // 带宽密集段：下载 + FFmpeg + OSS 上传 → 完成后释放 media slot
@@ -525,7 +525,7 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                     // DashScope Paraformer Transcription
                     // See API Docs: https://help.aliyun.com/zh/model-studio/developer-reference/record-file-recognition
                     console.log('正在提交阿里云 DashScope (Paraformer) 录音文件识别任务...');
-                    await safeUpdateProgress({ step: 'transcribe', p: item.index, message: '提取结构化文本...', percent: Math.round(baseProgress + stepProgress * 3), partialResults: results });
+                    await safeUpdateProgress({ step: 'transcribe', p: item.index, message: '提取结构化文本...', percent: Math.round(baseProgress + stepProgress * 0.3), partialResults: results });
 
                     const dashscopeKey = (process.env.DASHSCOPE_API_KEY as string)?.replace(/['"]/g, '').trim();
 
@@ -581,7 +581,7 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                                     throw new Error("DashScope 任务被意外取消");
                                 }
 
-                                await safeUpdateProgress({ step: 'transcribe', p: item.index, message: `内容分析中...`, percent: Math.round(baseProgress + stepProgress * 3), partialResults: results });
+                                await safeUpdateProgress({ step: 'transcribe', p: item.index, message: `内容分析中...`, percent: Math.round(baseProgress + stepProgress * 0.35), partialResults: results });
                             }
 
                             if (!transcriptionResult) throw new Error("DashScope 大模型转录超时");
@@ -711,7 +711,7 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                     const deepseekKey = (process.env.DEEPSEEK_API_KEY as string)?.replace(/['\"]/g, '').trim();
                     if (deepseekKey) {
                         console.log(`[P${item.index}] 📚 启动书籍识别探针 (${fullText.length} 字)...`);
-                        await safeUpdateProgress({ step: 'book_preflight', p: item.index, message: '内容分析中...', percent: Math.round(baseProgress + stepProgress * 3.5), partialResults: results });
+                        await safeUpdateProgress({ step: 'book_preflight', p: item.index, message: '内容分析中...', percent: Math.round(baseProgress + stepProgress * 0.4), partialResults: results });
 
                         const preflight = await runBookPreflight(fullText, deepseekKey);
                         console.log(`[P${item.index}] 📚 探针结果: doc_type=${preflight.doc_type}, split=${preflight.split_recommended}, reason=${preflight.split_reason}`);
@@ -738,7 +738,7 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                                     error: null,
                                 };
                                 try {
-                                    await safeUpdateProgress({ step: 'ai_brain', p: chapIndex, message: `知识萃取中...`, percent: Math.round(baseProgress + stepProgress * 4 * ((ci + 1) / chapterTexts.length)), partialResults: results });
+                                    await safeUpdateProgress({ step: 'ai_brain', p: chapIndex, message: `知识萃取中...`, percent: Math.round(baseProgress + stepProgress * (0.4 + 0.5 * ((ci + 1) / chapterTexts.length))), partialResults: results });
                                     const systemPrompt = `你是一名极度理性的专属知识库架构师。\n核心任务是将书籍章节内容萃取为原子化、**树状层级**的知识卡片流 (Card Flow)。\n该章节来自《${item.title}》的"${chap.title}"部分。\n【格式要求】必须严格输出纯 JSON，禁止任何 Markdown 代码块包装，直接以 { 开始。\n{"chapters":[{"id":"chapter_01","title":"<高度归纳的本章核心议题>","nodes":[{"id":"card_01","title":"节点标题","type":"concept","content":"核心概述","detailedPoints":[{"point":"具体细节"}],"relations":[]}]}],"terms":[{"term":"专业词","brief":"解释"}]}`;
                                     const completion = await openai.chat.completions.create({
                                         messages: [
@@ -793,7 +793,7 @@ const worker = new Worker('bili-extract', async (job: Job) => {
                     console.log(`[P${item.index}] ✅ 短内容已生成占位卡片`);
                 } else {
                     console.log('调用 DeepSeek 提取高颗粒度知识模块...');
-                    await safeUpdateProgress({ step: 'ai_brain', p: item.index, message: '知识萃取中...', percent: Math.round(baseProgress + stepProgress * 4), partialResults: results });
+                    await safeUpdateProgress({ step: 'ai_brain', p: item.index, message: '知识萃取中...', percent: Math.round(baseProgress + stepProgress * 0.8), partialResults: results });
 
                     // Pass full text to DeepSeek (no truncation)
                     const safeFullText = fullText;
