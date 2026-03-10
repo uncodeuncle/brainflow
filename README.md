@@ -70,7 +70,7 @@ BrainFlow 使用 BullMQ 管理后台的视频/音频提取任务队列，因此*
 | `REDIS_HOST` | Redis 服务器地址，默认 `127.0.0.1` |
 | `REDIS_PORT` | Redis 端口，默认 `6379` |
 | `DEEPSEEK_API_KEY` | DeepSeek API 密钥，用于进行 AI 的底层逻辑拆解与总结 |
-| `ALIYUN_ACCESS_KEY_ID` | 阿里云 **RAM 子账号** 开发凭证，**严禁使用主账号**，用于调用「听悟」音频转文字与颁发 OSS STS 令牌 |
+| `ALIYUN_ACCESS_KEY_ID` | 阿里云 **RAM 子账号** 开发凭证，**严禁使用主账号**，用于颁发 OSS STS 令牌 |
 | `ALIYUN_ACCESS_KEY_SECRET` | 阿里云 RAM 子账号的访问密钥 |
 | `ALIYUN_STS_ROLE_ARN` | 用于前端 OSS 直传的 RAM 角色 ARN，格式：`acs:ram::主账号UID:role/角色名` |
 | `ALIYUN_OSS_BUCKET` | 用于接收本地文件直传的 OSS Bucket 名称 |
