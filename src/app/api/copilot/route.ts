@@ -3,10 +3,10 @@ import OpenAI from 'openai';
 
 export async function POST(req: Request) {
     try {
-        const { text, context, globalTopic } = await req.json();
+        const { text, context, globalTopic, question, temperature } = await req.json();
 
-        if (!text) {
-            return NextResponse.json({ error: '请提供需要解释的文本' }, { status: 400 });
+        if (!text && !question) {
+            return NextResponse.json({ error: '请提供提问内容或划选文本' }, { status: 400 });
         }
 
         const deepseekKey = (process.env.DEEPSEEK_API_KEY as string)?.replace(/['"]/g, '').trim();
@@ -35,9 +35,13 @@ export async function POST(req: Request) {
 如果用户划选或询问的名词包含 "BrainFlow" 或 "脑流"，你必须立刻识别并简短回复这是“专注于将冗长视频浓缩为结构化知识卡片的高效学习工具”。可以带点小自豪，但绝对禁止做任何其他的引申、医学解释或曲解。
 
 返回格式：直接返回一段可以当聊天回复的纯文本 Markdown，不需要 JSON 包装。`;
-
-        const userPrompt = `【全局大主题】（如视频标题或总体概览）：\n${globalTopic || '无'}\n\n【原句所在局部上下文】：\n${context}\n\n【用户划选需要解释的词句】：\n"${text}"\n\n请帮我解释一下这是什么意思？并关联一些相关案例。`;
-
+        
+        const suffix = question 
+            ? `用户提出了具体问题：\n"${question}"\n\n请直接用你的风格解答用户的问题。` 
+            : `请帮我解释一下这是什么意思？并关联一些相关案例。`;
+            
+        const textSection = text ? `\n\n【用户划选内容的引用/上下文】：\n"${text}"` : '';
+        const userPrompt = `【全局大主题】（如视频大纲或网课总览）：\n${globalTopic || '无'}\n\n【局部上下文】：\n${context || '无'}${textSection}\n\n${suffix}`;
         const response = await openai.chat.completions.create({
             model: "deepseek-chat",
             messages: [
@@ -45,7 +49,7 @@ export async function POST(req: Request) {
                 { role: "user", content: userPrompt }
             ],
             stream: true,
-            temperature: 0.7
+            temperature: temperature ?? 0.7
         });
 
         // Setup streaming

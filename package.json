@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "dev:worker": "tsx worker/index.ts",
-    "dev:all": "concurrently \"npm run dev\" \"npm run dev:worker\"",
+    "dev:ws": "tsx worker/ws-server.ts",
+    "dev:all": "concurrently \"npm run dev\" \"npm run dev:worker\" \"npm run dev:ws\"",
     "build": "next build",
     "start": "next start -p 3012",
     "lint": "eslint",
@@ -49,6 +50,7 @@
     "reactflow": "^11.11.4",
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.5.0",
+    "ws": "^8.19.0",
     "youtube-dl-exec": "^3.1.1"
   },
   "devDependencies": {
@@ -58,6 +60,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/ws": "^8.18.1",
     "concurrently": "^9.2.1",
     "eslint": "^9",
     "eslint-config-next": "15.1.7",

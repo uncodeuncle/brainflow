@@ -14,6 +14,12 @@ export interface HistoryItem {
     results?: any[];
     /** Inline Copilot conversation history */
     copilotHistory?: any[];
+    /** Task type (e.g. 'live-class') */
+    type?: string;
+    /** For live classes, store the discussion stream */
+    liveChat?: any[];
+    /** For live classes, store the original transcript items */
+    transcriptList?: any[];
 }
 
 interface BiliBrainDB extends DBSchema {
