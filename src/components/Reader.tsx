@@ -36,9 +36,10 @@ interface ReaderProps {
     initialCopilotHistory?: any[];
     updateCopilotHistory?: (jobId: string, history: any[]) => Promise<void>;
     isLocal?: boolean;
+    isLiveClass?: boolean;
 }
 
-export function Reader({ jobId, onBack, saveResults, initialResults, initialCopilotHistory, updateCopilotHistory, isLocal }: ReaderProps) {
+export function Reader({ jobId, onBack, saveResults, initialResults, initialCopilotHistory, updateCopilotHistory, isLocal, isLiveClass }: ReaderProps) {
     const [status, setStatus] = useState<any>(initialResults ? { state: 'completed', result: { results: initialResults } } : null);
     const [activeIndex, setActiveIndex] = useState<number>(0);
     const [viewMode, setViewMode] = useState<'flow' | 'text'>('text');
@@ -345,6 +346,12 @@ export function Reader({ jobId, onBack, saveResults, initialResults, initialCopi
                             <div className="flex-1"></div>
                             {status?.result?.formats?.marp && <div className="px-3 py-1.5 rounded-full hover:bg-gray-100 text-[11px] font-bold text-muted-foreground cursor-pointer transition-colors border border-transparent hover:border-border">演示 PPT</div>}
                             {status?.result?.formats?.mermaid && <div className="px-3 py-1.5 rounded-full hover:bg-gray-100 text-[11px] font-bold text-muted-foreground cursor-pointer transition-colors border border-transparent hover:border-border">逻辑导图</div>}
+                            {isLiveClass && (
+                                <div onClick={() => window.location.href = `${getBasePath()}/live-class?id=${jobId}`} className="px-3 py-1.5 ml-1 rounded-full hover:bg-red-500/10 text-[12px] flex items-center gap-1.5 font-bold text-red-500 cursor-pointer transition-colors border border-red-500/20 bg-red-500/5 shadow-sm">
+                                    <MonitorPlay className="w-3.5 h-3.5" />
+                                    查看网课讨论
+                                </div>
+                            )}
                             <div onClick={() => setCopilotOpen(true)} className="px-3 py-1.5 ml-1 rounded-full hover:bg-primary/10 text-[12px] flex items-center gap-1.5 font-bold text-primary cursor-pointer transition-colors border border-primary/20 bg-primary/5 shadow-sm">
                                 <Sparkles className="w-3.5 h-3.5" />
                                 Copilot 记录

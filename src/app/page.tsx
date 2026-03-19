@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Search, Loader2, History, Trash2, Download, Upload, AlertTriangle, MonitorPlay, Edit2, Check, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,18 @@ export default function Home() {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
+
+  useEffect(() => {
+    if (isLoaded && typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const jobId = searchParams.get('jobId');
+      if (jobId && !activeJobId) {
+        // Automatically open reader if the history item exists
+        const itemExists = history.some(h => h.jobId === jobId);
+        if (itemExists) setActiveJobId(jobId);
+      }
+    }
+  }, [isLoaded, history, activeJobId]);
 
   const handleStartEdit = (e: React.MouseEvent, id: string, currentTitle: string) => {
     e.stopPropagation();
@@ -143,7 +155,7 @@ export default function Home() {
       const data = await res.json();
       if (res.ok) {
         // Append timestamp to BullMQ's sequential jobId to guarantee global uniqueness
-        const uniqueJobId = `${data.jobId}_${Date.now()}`;
+        const uniqueJobId = data.jobId; // Use original ID from API for proper polling
         addHistory({
           jobId: uniqueJobId,
           title: analyzeData.isLocal ? analyzeData.title : (config.rawData?.title || analyzeData?.title || config.rawData?.entries?.[0]?.title || analyzeData?.entries?.[0]?.title || '未命名合集任务'),
@@ -172,7 +184,25 @@ export default function Home() {
 
   if (activeJobId) {
     const historicalItem = history.find(h => h.jobId === activeJobId);
-    return <Reader jobId={activeJobId} onBack={() => setActiveJobId(null)} saveResults={saveResults} initialResults={historicalItem?.results} initialCopilotHistory={historicalItem?.copilotHistory} updateCopilotHistory={updateCopilotHistory} isLocal={historicalItem?.isLocal} />;
+    const isLiveClass = (historicalItem as any)?.type === 'live-class';
+    
+    return (
+      <div className="relative w-full h-full">
+        <Reader 
+          jobId={activeJobId} 
+          onBack={() => {
+             setActiveJobId(null);
+             window.history.replaceState({}, '', window.location.pathname);
+          }} 
+          saveResults={saveResults} 
+          initialResults={historicalItem?.results} 
+          initialCopilotHistory={historicalItem?.copilotHistory} 
+          updateCopilotHistory={updateCopilotHistory} 
+          isLocal={historicalItem?.isLocal}
+          isLiveClass={isLiveClass} 
+        />
+      </div>
+    );
   }
 
   const hasHistory = isLoaded && history.length > 0;
@@ -188,6 +218,9 @@ export default function Home() {
         </Button>
         <Button variant="outline" size="sm" onClick={() => exportHistory()} className="h-8 shadow-sm rounded-full border-border hover:border-primary hover:text-primary transition-colors text-xs text-muted-foreground bg-white/80 backdrop-blur-sm">
           <Download className="w-3.5 h-3.5 mr-1.5" /> 导出全部
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => window.location.href = `${getBasePath()}/live-class`} className="h-8 shadow-sm rounded-full border-border hover:border-primary hover:text-primary transition-colors text-xs text-muted-foreground bg-white/80 backdrop-blur-sm">
+          <MonitorPlay className="w-3.5 h-3.5 mr-1.5" /> 网课实时助手
         </Button>
       </div>
 
